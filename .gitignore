@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+
+# C extension (cffi generates .so via setup.py)
+*.so
+*.o
+*.a
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+.venv/
+venv/
+
+# Test artifacts
+/tmp/mmap_test_*
+
+# Benchmark queue directories
+bench_queues/
+test_queues/

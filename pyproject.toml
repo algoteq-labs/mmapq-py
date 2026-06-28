@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools", "cffi"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmap-c-py"
+version = "0.1.0"
+description = "Python bindings for mmap-c — low-latency memory-mapped queue"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,182 @@
+"""cffi API-mode build for mmap-c-py.
+
+Compiles the mmap-c C library into a Python C extension.
+"""
+
+import glob
+import os
+from pathlib import Path
+
+from setuptools import setup
+from cffi import FFI
+
+ffi = FFI()
+
+# ── C declarations (must match C headers exactly) ──────────────────────────
+
+ffi.cdef("""
+    /* ── Enums ──────────────────────────────────────────────────────────── */
+    typedef enum { NEXT_ADVANCE = 0, NEXT_STOP = 1, NEXT_RETREAT = 2 } NextMove;
+    typedef enum { POLL_END_OF_STREAM, POLL_ADVANCED, POLL_STOPPED,
+                   POLL_RETREATED, POLL_ARCHIVED, POLL_ERROR } PollResult;
+
+    /* ── Opaque types ────────────────────────────────────────────────────── */
+    typedef struct IndexedBatchQueue IndexedBatchQueue;
+    typedef struct IndexedBatchPoller IndexedBatchPoller;
+    typedef struct IndexedBatchAppender IndexedBatchAppender;
+    typedef struct MutableBatch MutableBatch;
+    typedef struct Runtime Runtime;
+
+    /* Buffer — embedded in BatchPayloadIterator */
+    typedef struct {
+        unsigned char *data;
+        int32_t        capacity;
+    } Buffer;
+
+    /* BatchPayloadIterator — embedded by value in BatchReadingContext.
+       Full field declaration needed for correct parent struct layout.
+       Field access from Python is through C functions, not directly. */
+    typedef struct {
+        void     *queue_name;
+        void     *payload_acc;
+        Buffer    payload_buf;
+        int64_t   batch_offset;
+        int32_t   message_count;
+        int32_t   current_msg_index;
+        int64_t   current_msg_offset;
+        int32_t   current_msg_length;
+        int64_t   next_message_position;
+        int       exhausted;
+    } BatchPayloadIterator;
+
+    /* ── BatchReadingContext ──────────────────────────────────────────────── */
+    typedef enum { BATCH_ENTRY_AVAILABLE, BATCH_ENTRY_END_OF_STREAM,
+                   BATCH_ENTRY_ARCHIVED, BATCH_ENTRY_ERROR } BatchEntryStatus;
+
+    typedef struct {
+        int64_t              index;
+        BatchEntryStatus     status;
+        int64_t              batch_offset;
+        int32_t              message_count;
+        BatchPayloadIterator batch_iterator;
+    } BatchReadingContext;
+
+    /* ── Handler callback ─────────────────────────────────────────────────── */
+    typedef NextMove (*BatchHandler)(int64_t, BatchReadingContext*, void*);
+
+    /* ── Runtime ──────────────────────────────────────────────────────────── */
+    Runtime* runtime_region_mapper(void);
+    int      runtime_set_affinity(Runtime*, int cpu_core);
+    void     runtime_destroy(Runtime*);
+
+    /* ── Queue factory ────────────────────────────────────────────────────── */
+    IndexedBatchQueue*    indexed_batch_queue_create_default(
+                              const char*, const char*, Runtime*, Runtime*);
+    IndexedBatchPoller*   indexed_batch_queue_create_poller(IndexedBatchQueue*);
+    IndexedBatchAppender* indexed_batch_queue_create_appender(IndexedBatchQueue*);
+    void                  indexed_batch_queue_close(IndexedBatchQueue*);
+
+    /* ── Batch poller ─────────────────────────────────────────────────────── */
+    IndexedBatchPoller* indexed_batch_poller_create(
+        const char*, const char*, int, uint64_t, Runtime*);
+    PollResult          indexed_batch_poller_poll(
+        IndexedBatchPoller*, BatchHandler, void*);
+    int                 indexed_batch_poller_move_to_index(
+        IndexedBatchPoller*, int64_t);
+    int                 indexed_batch_poller_move_to_end(
+        IndexedBatchPoller*);
+    int                 indexed_batch_poller_move_to_last_existing_batch(
+        IndexedBatchPoller*);
+    int                 indexed_batch_poller_move_to_start(
+        IndexedBatchPoller*);
+    int64_t             indexed_batch_poller_current_batch_index(
+        const IndexedBatchPoller*);
+    int64_t             indexed_batch_poller_start_index(
+        IndexedBatchPoller*);
+    int                 indexed_batch_poller_exists(
+        IndexedBatchPoller*, int64_t);
+    void                indexed_batch_poller_close(
+        IndexedBatchPoller*);
+
+    /* ── Batch payload iterator ──────────────────────────────────────────── */
+    int      batch_iterator_advance(BatchPayloadIterator*);
+    int32_t  batch_iterator_current_length_ffi(const BatchPayloadIterator*);
+    const void* batch_iterator_current_data_ffi(const BatchPayloadIterator*);
+    int32_t  batch_iterator_read_message_count(BatchPayloadIterator*, int64_t);
+    BatchPayloadIterator* batch_iterator_init(
+        BatchPayloadIterator*, int64_t, int32_t, int32_t);
+
+    /* ── Batch appender ──────────────────────────────────────────────────── */
+    MutableBatch* indexed_batch_appender_start_batch(IndexedBatchAppender*);
+    int64_t       mutable_batch_complete(MutableBatch*);
+    int64_t       indexed_batch_appender_commit_batch(
+                      IndexedBatchAppender*, int64_t);
+    int32_t       mutable_batch_append(MutableBatch*, const void*, int32_t);
+    int32_t       mutable_batch_append_remaining_from(
+                      MutableBatch*, BatchPayloadIterator*);
+    void          indexed_batch_appender_discard_batch(
+                      IndexedBatchAppender*, int64_t);
+    void          indexed_batch_appender_close(IndexedBatchAppender*);
+""")
+
+# ── C source files ─────────────────────────────────────────────────────────
+#
+# Paths must be relative to setup.py for setuptools compatibility.
+# Expected layout:
+#   mmap-c-py/setup.py
+#   mmap-c/          (sibling — the C library)
+#
+# Fallback: look inside a c/ submodule at the same level.
+
+import glob  # noqa: F811
+
+_script_dir = Path(__file__).resolve().parent
+_c_dir = _script_dir.parent / "mmap-c"
+if not _c_dir.exists():
+    _c_dir = _script_dir / "c"
+
+_c_src_dir = _c_dir / "src"
+_c_include_dir = _c_dir / "include"
+
+# Compute relative path from setup.py to the C sources
+_rel_src = Path(os.path.relpath(_c_src_dir, _script_dir))
+_rel_inc = Path(os.path.relpath(_c_include_dir, _script_dir))
+
+c_sources = sorted(str(p) for p in _c_src_dir.glob("*.c"))
+if not c_sources:
+    raise SystemExit(
+        f"ERROR: no C sources found in {_c_src_dir}. "
+        "Make sure the mmap-c submodule is checked out."
+    )
+
+# Convert absolute paths to relative for setuptools compatibility.
+# os.path.relpath works even when sources are outside the setup.py tree.
+_rel_sources = [os.path.relpath(p, _script_dir) for p in c_sources]
+
+ffi.set_source(
+    "mmap_c_py._cffi",
+    """
+    #include "header_codec.h"
+    #include "batch_payload_iterator.h"
+    #include "indexed_batch_queue.h"
+    #include "indexed_batch_poller.h"
+    #include "indexed_batch_appender.h"
+    #include "indexed_batch_reader.h"
+    #include "runtime.h"
+    """,
+    sources=_rel_sources,
+    include_dirs=[str(_rel_inc)],
+    libraries=["rt", "pthread", "m"],
+    extra_compile_args=["-std=gnu11", "-O2", "-D_GNU_SOURCE", "-DNDEBUG",
+                        "-Wno-unused-parameter", "-Wno-attributes"],
+)
+
+setup(
+    name="mmap-c-py",
+    version="0.1.0",
+    description="Python bindings for mmap-c — low-latency memory-mapped queue",
+    packages=["mmap_c_py"],
+    package_dir={"": "src"},
+    ext_modules=[ffi.distutils_extension()],
+    python_requires=">=3.10",
+)
