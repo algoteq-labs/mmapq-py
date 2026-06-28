@@ -12,6 +12,9 @@ from .types import (
     BatchPollResult,
     BatchEntryStatus,
 )
+from .single_queue import IndexedQueue
+from .single_appender import IndexedAppender
+from .single_poller import IndexedPoller
 from .batch_queue import IndexedBatchQueue
 from .batch_poller import IndexedBatchPoller
 from .batch_appender import IndexedBatchAppender, BatchWriter
@@ -21,6 +24,9 @@ __all__ = [
     "PollResult",
     "BatchPollResult",
     "BatchEntryStatus",
+    "IndexedQueue",
+    "IndexedAppender",
+    "IndexedPoller",
     "IndexedBatchQueue",
     "IndexedBatchPoller",
     "IndexedBatchAppender",

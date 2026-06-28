@@ -1,11 +1,14 @@
 # mmap-c-py
 
 Python bindings for [mmap-c](https://github.com/algoteq-labs/mmap-c) — a low-latency,
-memory-mapped, shared-memory batch queue for inter-process messaging on Linux.
+memory-mapped, shared-memory indexed queue for inter-process messaging on Linux.
 
 Built with [cffi](https://cffi.readthedocs.io/) in API mode, the same architecture as
 the Rust bindings (`mmap-c-rs`): a thin zero-overhead FFI layer over the C library, with
 Pythonic RAII via context managers.
+
+Both **single-message** and **batch** queue APIs are available, matching the C and Rust
+bindings.
 
 ## Features
 
@@ -18,14 +21,39 @@ Pythonic RAII via context managers.
 
 ## Quick Start
 
+### Single-message queue
+
+```python
+from mmap_c_py import IndexedQueue, NextMove
+
+queue = IndexedQueue.create("/dev/shm", "my_queue")
+appender = queue.create_appender()
+poller = queue.create_poller()
+
+# Append a message (committed atomically)
+appender.append(b"hello world")
+
+# Poll for the message
+def handler(index, appender_id, data):
+    print(f"[{index}] {data}")
+    return NextMove.ADVANCE
+
+poller.poll(handler)
+
+appender.close()
+poller.close()
+queue.close()
+```
+
+### Batch queue
+
 ```python
 from mmap_c_py import IndexedBatchQueue, NextMove
 
-# Open or create a batch queue
-queue = IndexedBatchQueue.create("/dev/shm", "my_queue")
-
-# Append a batch with three messages
+queue = IndexedBatchQueue.create("/dev/shm", "my_batch_queue")
 appender = queue.create_appender()
+
+# Append a batch with three messages (single atomic commit)
 with appender.start_batch() as writer:
     writer.append(b"hello")
     writer.append(b"world")
@@ -34,10 +62,13 @@ with appender.start_batch() as writer:
 
 # Poll for the batch
 poller = queue.create_poller()
-result = poller.poll(lambda batch_index, ctx: NextMove.ADVANCE)
-print(f"Poll result: {result}")
 
-# Clean up
+def handler(batch_index, ctx):
+    print(f"Batch {batch_index}: {ctx.message_count} messages")
+    return NextMove.ADVANCE
+
+poller.poll(handler)
+
 poller.close()
 appender.close()
 queue.close()
@@ -77,19 +108,37 @@ operations, payload reads, and region mapping happen in C code compiled by cffi.
 
 ## API
 
-### Types
+### Exports
 
 ```python
 from mmap_c_py import (
-    IndexedBatchQueue,      # Queue factory
-    IndexedBatchPoller,      # Sequential batch consumer
-    IndexedBatchAppender,    # Batch producer
-    BatchWriter,            # In-progress batch (context manager)
+    # Shared types
     NextMove,               # Handler return: ADVANCE, STOP, RETREAT
     PollResult,             # Poll result: END_OF_STREAM, ADVANCED, etc.
     BatchPollResult,        # Alias for PollResult
-    BatchEntryStatus,       # Batch availability: AVAILABLE, END_OF_STREAM, etc.
+    BatchEntryStatus,       # Batch availability
+
+    # Single-message queue
+    IndexedQueue,           # Queue factory
+    IndexedAppender,        # Producer
+    IndexedPoller,          # Sequential consumer
+
+    # Batch queue
+    IndexedBatchQueue,      # Queue factory
+    IndexedBatchPoller,     # Sequential batch consumer
+    IndexedBatchAppender,   # Batch producer
+    BatchWriter,            # In-progress batch (context manager)
 )
+```
+
+### Single-message handler callback
+
+The handler passed to `poller.poll()` receives `(index: int, appender_id: int, data: bytes)`:
+
+```python
+def handler(index, appender_id, data):
+    print(f"[{index}] {data}")
+    return NextMove.ADVANCE
 ```
 
 ### Batch handler callback

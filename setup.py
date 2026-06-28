@@ -21,6 +21,9 @@ ffi.cdef("""
                    POLL_RETREATED, POLL_ARCHIVED, POLL_ERROR } PollResult;
 
     /* ── Opaque types ────────────────────────────────────────────────────── */
+    typedef struct IndexedQueue IndexedQueue;
+    typedef struct IndexedAppender IndexedAppender;
+    typedef struct IndexedPoller IndexedPoller;
     typedef struct IndexedBatchQueue IndexedBatchQueue;
     typedef struct IndexedBatchPoller IndexedBatchPoller;
     typedef struct IndexedBatchAppender IndexedBatchAppender;
@@ -69,7 +72,45 @@ ffi.cdef("""
     int      runtime_set_affinity(Runtime*, int cpu_core);
     void     runtime_destroy(Runtime*);
 
-    /* ── Queue factory ────────────────────────────────────────────────────── */
+    /* ── ReadingContext (single-message result struct) ────────────────────── */
+    typedef struct {
+        int64_t  index;
+        uint8_t  appender_id;
+        int64_t  msg_offset;
+        void    *data;
+        int32_t  length;
+        int      status;
+    } ReadingContext;
+
+    /* ── MessageHandler (single-message poller) ────────────────────────────── */
+    typedef NextMove (*MessageHandler)(int64_t, uint8_t, const void*, int32_t, void*);
+
+    /* ── Single-message queue factory ──────────────────────────────────────── */
+    IndexedQueue*    indexed_queue_create_default(
+                         const char*, const char*, Runtime*, Runtime*);
+    IndexedAppender* indexed_queue_create_appender(IndexedQueue*);
+    IndexedPoller*   indexed_queue_create_poller(IndexedQueue*);
+    void             indexed_queue_close(IndexedQueue*);
+
+    /* ── Single-message appender ───────────────────────────────────────────── */
+    int64_t  indexed_appender_append(IndexedAppender*, const void*, int32_t);
+    int64_t  indexed_appender_current_index(const IndexedAppender*);
+    uint8_t  indexed_appender_id(const IndexedAppender*);
+    void     indexed_appender_close(IndexedAppender*);
+
+    /* ── Single-message poller ─────────────────────────────────────────────── */
+    IndexedPoller* indexed_poller_create(const char*, const char*, int, uint64_t, Runtime*);
+    PollResult     indexed_poller_poll(IndexedPoller*, MessageHandler, void*);
+    int            indexed_poller_move_to_index(IndexedPoller*, int64_t);
+    int            indexed_poller_move_to_end(IndexedPoller*);
+    int            indexed_poller_move_to_last(IndexedPoller*);
+    int            indexed_poller_move_to_start(IndexedPoller*);
+    int64_t        indexed_poller_current_index(const IndexedPoller*);
+    int64_t        indexed_poller_start_index(IndexedPoller*);
+    int            indexed_poller_exists(IndexedPoller*, int64_t);
+    void           indexed_poller_close(IndexedPoller*);
+
+    /* ── Batch queue factory ───────────────────────────────────────────────── */
     IndexedBatchQueue*    indexed_batch_queue_create_default(
                               const char*, const char*, Runtime*, Runtime*);
     IndexedBatchPoller*   indexed_batch_queue_create_poller(IndexedBatchQueue*);
@@ -163,6 +204,7 @@ ffi.set_source(
     #include "indexed_batch_appender.h"
     #include "indexed_batch_reader.h"
     #include "runtime.h"
+    #include "indexed_queue.h"
     """,
     sources=_rel_sources,
     include_dirs=[str(_rel_inc)],

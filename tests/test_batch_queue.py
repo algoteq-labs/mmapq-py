@@ -1,4 +1,4 @@
-"""Tests for the mmap-c-py batch queue bindings."""
+"""Tests for mmap-c-py — single-message and batch queue bindings."""
 
 import os
 import shutil
@@ -9,6 +9,9 @@ from mmap_c_py import (
     NextMove,
     PollResult,
     BatchPollResult,
+    IndexedQueue,
+    IndexedAppender,
+    IndexedPoller,
     IndexedBatchQueue,
     ffi,
     lib,
@@ -166,6 +169,119 @@ class TestBatchQueue(unittest.TestCase):
         self.assertEqual(messages[0], (0, b"alpha"))
         self.assertEqual(messages[1], (0, b"beta"))
         self.assertEqual(messages[2], (0, b"gamma"))
+
+        p.close()
+        a.close()
+        q.close()
+
+
+class TestSingleQueue(unittest.TestCase):
+    """Tests for the single-message queue bindings."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_single_test")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_create_queue(self):
+        q = IndexedQueue.create(self.test_dir, "sq")
+        self.assertIsNotNone(q)
+        q.close()
+
+    def test_create_appender_and_poller(self):
+        q = IndexedQueue.create(self.test_dir, "sq_ap")
+        a = q.create_appender()
+        p = q.create_poller()
+        self.assertIsNotNone(a)
+        self.assertIsNotNone(p)
+        a.close()
+        p.close()
+        q.close()
+
+    def test_append_and_poll(self):
+        q = IndexedQueue.create(self.test_dir, "sq_ap1")
+        a = q.create_appender()
+        p = q.create_poller()
+
+        a.append(b"hello")
+
+        messages = []
+
+        def handler(idx, aid, data):
+            messages.append((idx, aid, data))
+            return NextMove.ADVANCE
+
+        result = p.poll(handler)
+        self.assertEqual(result, PollResult.ADVANCED)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][0], 0)
+        self.assertEqual(messages[0][2], b"hello")
+
+        p.close()
+        a.close()
+        q.close()
+
+    def test_end_of_stream(self):
+        q = IndexedQueue.create(self.test_dir, "sq_eos")
+        p = q.create_poller()
+
+        result = p.poll(lambda i, a, d: NextMove.ADVANCE)
+        self.assertEqual(result, PollResult.END_OF_STREAM)
+
+        p.close()
+        q.close()
+
+    def test_stop(self):
+        q = IndexedQueue.create(self.test_dir, "sq_stop")
+        a = q.create_appender()
+        p = q.create_poller()
+
+        a.append(b"msg")
+        result = p.poll(lambda i, a, d: NextMove.STOP)
+        self.assertEqual(result, PollResult.STOPPED)
+
+        p.close()
+        a.close()
+        q.close()
+
+    def test_move_and_exists(self):
+        q = IndexedQueue.create(self.test_dir, "sq_move")
+        a = q.create_appender()
+        p = q.create_poller()
+
+        self.assertFalse(p.exists(0))
+        a.append(b"x")
+        self.assertTrue(p.exists(0))
+        self.assertFalse(p.exists(1))
+
+        self.assertTrue(p.move_to_last())
+        self.assertEqual(p.current_index(), 0)
+
+        p.close()
+        a.close()
+        q.close()
+
+    def test_multiple_messages(self):
+        q = IndexedQueue.create(self.test_dir, "sq_multi")
+        a = q.create_appender()
+        p = q.create_poller()
+
+        for i in range(5):
+            a.append(f"msg{i}".encode())
+
+        seen = []
+
+        def handler(idx, aid, data):
+            seen.append((idx, data))
+            return NextMove.ADVANCE
+
+        for _ in range(5):
+            p.poll(handler)
+
+        self.assertEqual(len(seen), 5)
+        for i in range(5):
+            self.assertEqual(seen[i][1], f"msg{i}".encode())
 
         p.close()
         a.close()
