@@ -6,6 +6,11 @@ from . import _cffi as _cffi_mod
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 
+from ._errors import (
+    QueueClosedError,
+    QueueCorruptError,
+    check_rc,
+)
 from .types import (
     NextMove,
     PollResult,
@@ -31,4 +36,6 @@ __all__ = [
     "IndexedBatchPoller",
     "IndexedBatchAppender",
     "BatchWriter",
+    "QueueClosedError",
+    "QueueCorruptError",
 ]

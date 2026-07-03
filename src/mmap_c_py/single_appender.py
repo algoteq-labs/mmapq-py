@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from . import _cffi as _cffi_mod
+from ._errors import check_rc
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -25,10 +26,8 @@ class IndexedAppender:
         Returns the committed index.
         """
         buf = ffi.from_buffer(data)
-        idx = lib.indexed_appender_append(self._inner, buf, len(data))
-        if idx < 0:
-            raise RuntimeError("indexed_appender_append failed")
-        return idx
+        rc = lib.indexed_appender_append(self._inner, buf, len(data))
+        return check_rc(rc, "append")
 
     def current_index(self) -> int:
         """Return the index that will be assigned to the next append."""

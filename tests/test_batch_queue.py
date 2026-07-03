@@ -288,5 +288,29 @@ class TestSingleQueue(unittest.TestCase):
         q.close()
 
 
+class TestErrors(unittest.TestCase):
+    """Tests for error handling."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_err_test")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_append_empty_raises_value_error(self):
+        from mmap_c_py import IndexedQueue
+        q = IndexedQueue.create(self.test_dir, "err_empty")
+        a = q.create_appender()
+        with self.assertRaises(ValueError):
+            a.append(b"")
+        a.close()
+        q.close()
+
+    def test_exception_types_importable(self):
+        from mmap_c_py import QueueClosedError, QueueCorruptError
+        self.assertTrue(issubclass(QueueClosedError, RuntimeError))
+        self.assertTrue(issubclass(QueueCorruptError, RuntimeError))
+
+
 if __name__ == "__main__":
     unittest.main()
