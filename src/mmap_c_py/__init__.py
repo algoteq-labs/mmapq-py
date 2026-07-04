@@ -9,6 +9,7 @@ lib = _cffi_mod.lib
 from ._errors import (
     QueueClosedError,
     QueueCorruptError,
+    SchemaMismatchError,
     check_rc,
 )
 from .types import (
@@ -38,4 +39,5 @@ __all__ = [
     "BatchWriter",
     "QueueClosedError",
     "QueueCorruptError",
+    "SchemaMismatchError",
 ]

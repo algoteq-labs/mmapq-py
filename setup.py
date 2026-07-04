@@ -86,6 +86,10 @@ ffi.cdef("""
     typedef NextMove (*MessageHandler)(int64_t, uint8_t, const void*, int32_t, void*);
 
     /* ── Single-message queue factory ──────────────────────────────────────── */
+    IndexedQueue*    indexed_queue_create(
+                         const char*, const char*, int32_t, int, int,
+                         int64_t, int64_t, uint64_t, int,
+                         Runtime*, Runtime*);
     IndexedQueue*    indexed_queue_create_default(
                          const char*, const char*, Runtime*, Runtime*);
     IndexedAppender* indexed_queue_create_appender(IndexedQueue*);
@@ -111,6 +115,10 @@ ffi.cdef("""
     void           indexed_poller_close(IndexedPoller*);
 
     /* ── Batch queue factory ───────────────────────────────────────────────── */
+    IndexedBatchQueue*    indexed_batch_queue_create(
+                              const char*, const char*, int32_t, int, int,
+                              int64_t, int64_t, uint64_t, int,
+                              Runtime*, Runtime*);
     IndexedBatchQueue*    indexed_batch_queue_create_default(
                               const char*, const char*, Runtime*, Runtime*);
     IndexedBatchPoller*   indexed_batch_queue_create_poller(IndexedBatchQueue*);

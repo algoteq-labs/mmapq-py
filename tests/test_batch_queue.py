@@ -13,6 +13,7 @@ from mmap_c_py import (
     IndexedAppender,
     IndexedPoller,
     IndexedBatchQueue,
+    IndexedBatchAppender,
     ffi,
     lib,
 )
@@ -307,9 +308,66 @@ class TestErrors(unittest.TestCase):
         q.close()
 
     def test_exception_types_importable(self):
-        from mmap_c_py import QueueClosedError, QueueCorruptError
+        from mmap_c_py import QueueClosedError, QueueCorruptError, SchemaMismatchError
         self.assertTrue(issubclass(QueueClosedError, RuntimeError))
         self.assertTrue(issubclass(QueueCorruptError, RuntimeError))
+        self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
+
+
+class TestArchivable(unittest.TestCase):
+    """Tests for archivable parameter."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_arch")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_archivable_true_sets_byte24(self):
+        q = IndexedQueue.create(self.test_dir, "q", archivable=True)
+        a = q.create_appender()
+        a.append(b"stamp")
+        a.close()
+        meta_path = os.path.join(self.test_dir, "q", "meta")
+        with open(meta_path, "rb") as f:
+            f.seek(24)
+            self.assertEqual(ord(f.read(1)), 1)
+        q.close()
+
+    def test_archivable_default_is_zero(self):
+        q = IndexedQueue.create(self.test_dir, "q")
+        a = q.create_appender()
+        a.append(b"stamp")
+        a.close()
+        meta_path = os.path.join(self.test_dir, "q", "meta")
+        with open(meta_path, "rb") as f:
+            f.seek(24)
+            self.assertEqual(ord(f.read(1)), 0)
+        q.close()
+
+
+class TestQueueType(unittest.TestCase):
+    """Tests for queue_type discriminator rejection."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_qt")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_cross_type_open_rejected(self):
+        q = IndexedQueue.create(self.test_dir, "q")
+        a = q.create_appender()
+        a.append(b"stamp-normal")
+        a.close()
+        q.close()
+        with self.assertRaises(Exception):
+            bq = IndexedBatchQueue.create(self.test_dir, "q")
+            bq.create_appender()
+
+    def test_schema_mismatch_error_importable(self):
+        from mmap_c_py import SchemaMismatchError
+        self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
 
 
 if __name__ == "__main__":

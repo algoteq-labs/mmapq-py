@@ -11,11 +11,16 @@ class QueueCorruptError(RuntimeError):
     """On-disk corruption detected (e.g., committed zero-length message)."""
 
 
+class SchemaMismatchError(RuntimeError):
+    """Schema version or queue type mismatch on open."""
+
+
 _RC_ERRORS = {
     -1: (RuntimeError, "mapping timed out or I/O error"),
     -2: (ValueError, "invalid argument"),
     -3: (QueueClosedError, "queue/appender is closed"),
     -4: (QueueCorruptError, "on-disk corruption detected"),
+    -5: (SchemaMismatchError, "schema version or queue type mismatch"),
 }
 
 

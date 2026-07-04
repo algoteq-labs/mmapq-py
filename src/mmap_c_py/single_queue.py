@@ -19,7 +19,8 @@ class IndexedQueue:
         self._inner = inner
 
     @classmethod
-    def create(cls, directory, queue_name, write_runtime=None, read_runtime=None):
+    def create(cls, directory, queue_name, write_runtime=None, read_runtime=None,
+               archivable=False):
         """Create or open a queue with default configuration.
 
         Args:
@@ -27,14 +28,24 @@ class IndexedQueue:
             queue_name: Logical queue name.
             write_runtime: Optional Runtime for write-side background mapping.
             read_runtime: Optional Runtime for read-side background mapping.
+            archivable: If True, create the queue archivable (archiver may
+                advance start_index). Default False (performant mode).
+                Applies at creation only — existing queues keep on-disk value.
         """
         wr = write_runtime if write_runtime is not None else ffi.NULL
         rr = read_runtime if read_runtime is not None else ffi.NULL
-        ptr = lib.indexed_queue_create_default(
-            directory.encode(), queue_name.encode(), wr, rr,
-        )
+        if archivable:
+            ptr = lib.indexed_queue_create(
+                directory.encode(), queue_name.encode(),
+                4096 * 1024, 4, 1, (4096 * 1024) * 256,
+                0, 10000000000, 1, wr, rr,
+            )
+        else:
+            ptr = lib.indexed_queue_create_default(
+                directory.encode(), queue_name.encode(), wr, rr,
+            )
         if not ptr:
-            raise RuntimeError("indexed_queue_create_default returned NULL")
+            raise RuntimeError("indexed_queue_create returned NULL")
         return cls(ptr)
 
     def create_appender(self):
