@@ -1,22 +1,25 @@
 # mmap-c-py
 
-Python bindings for [mmap-c](https://github.com/algoteq-labs/mmap-c) — a low-latency,
+Python bindings for mmap-c — a low-latency,
 memory-mapped, shared-memory indexed queue for inter-process messaging on Linux.
 
 Built with [cffi](https://cffi.readthedocs.io/) in API mode, the same architecture as
 the Rust bindings (`mmap-c-rs`): a thin zero-overhead FFI layer over the C library, with
 Pythonic RAII via context managers.
 
-Both **single-message** and **batch** queue APIs are available, matching the C and Rust
-bindings.
+Python exposes the **producer/consumer subset** — append and poll for both
+single-message and batch queues — which covers the dominant Python use case
+(writing from or feeding into Python processes). Random access, transfer,
+archiving, and low-level batch construction remain C/Rust territory. See
+`doc/feature-matrix.md` in the mmap-c repository for the full matrix.
 
 ## Features
 
 - **Zero-copy** — messages are read directly from mapped memory through the C library
 - **Batch queue** — group multiple messages under a single atomic commit with per-batch callback delivery
 - **RAII via context managers** — `BatchWriter` auto-rolls back on error when used with `with`
-- **Cross-process** — share queues between Python, C, Rust, and Java processes on the same machine
-- **C-ABI compatible** — identical wire format and protocol as the Java `tools4j/mmap` library
+- **Cross-process** — share queues between Python, C, Rust, and Algoteq Java processes on the same machine
+- **C-ABI compatible** — identical wire format and protocol as Algoteq's Java implementation (tools4j-derived; NOT compatible with upstream tools4j)
 - **Panic-safe callbacks** — Python exceptions in handlers are caught and logged without crashing the process
 
 ## Quick Start
@@ -97,7 +100,7 @@ The underlying C library stores messages in two file types:
 - **Header file** (one per queue): 8-byte atomically-committed entries spaced 512 bytes
   apart (vertical walk layout). Each header encodes an appender ID and a payload offset
   in a single 64-bit CAS word.
-- **Payload files** (one per appender): [int32 length][payload bytes] framing, with a
+- **Payload files** (one per appender): `[int32 length][payload bytes]` framing, with a
   message count prefix for batches.
 
 The vertical walk layout (index N at offset N × 512) ensures consecutive writes by
@@ -193,7 +196,7 @@ round-trip at the C level, but Python's interpreter overhead dominates the hot p
 Expected throughput on isolated cores: **100,000–200,000 ops/sec** (vs 2.8M for C).
 
 This is the right tool when you need:
-- Cross-process queue compatibility with existing C/Rust/Java deployments
+- Cross-process queue compatibility with existing C/Rust/Algoteq Java deployments
 - Python process integration into an existing mmap-c pipeline
 - Prototyping or testing with batch queue semantics
 
@@ -207,7 +210,7 @@ python -m unittest discover tests
 
 ## Acknowledgements
 
-mmap-c-py is a Python port of [Algoteq's mmap-c](https://github.com/algoteq-labs/mmap-c),
+mmap-c-py is a Python port of Algoteq's mmap-c,
 which was derived from the [tools4j/mmap](https://github.com/tools4j/mmap) Java library.
 
 ## License
