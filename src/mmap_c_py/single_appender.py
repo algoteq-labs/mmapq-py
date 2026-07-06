@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import weakref
+
 from . import _cffi as _cffi_mod
 from ._errors import check_rc
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
+
+
+def _destroy_appender(inner):
+    if inner is not None:
+        lib.indexed_appender_close(inner)
 
 
 class IndexedAppender:
@@ -18,6 +25,8 @@ class IndexedAppender:
 
     def __init__(self, inner):
         self._inner = inner
+        self._runtime = None
+        self._finalizer = weakref.finalize(self, _destroy_appender, inner)
 
     def append(self, data: bytes) -> int:
         """Append a single message to the queue.
@@ -29,6 +38,27 @@ class IndexedAppender:
         rc = lib.indexed_appender_append(self._inner, buf, len(data))
         return check_rc(rc, "append")
 
+    def append_uncommitted(self, data: bytes) -> int:
+        """Write a payload without committing it.
+
+        An uncommitted payload is invisible to all readers and is discarded
+        by crash recovery; only commit() publishes it.
+        Returns the payload offset (for later use with commit()).
+        """
+        buf = ffi.from_buffer(data)
+        rc = lib.indexed_appender_append_uncommitted(self._inner, buf, len(data))
+        return check_rc(rc, "append_uncommitted")
+
+    def commit(self, payload_offset: int) -> int:
+        """Commit a previously uncommitted payload.
+
+        An uncommitted payload is invisible to all readers and is discarded
+        by crash recovery; only commit() publishes it.
+        Returns the committed index.
+        """
+        rc = lib.indexed_appender_commit(self._inner, payload_offset)
+        return check_rc(rc, "commit")
+
     def current_index(self) -> int:
         """Return the index that will be assigned to the next append."""
         return lib.indexed_appender_current_index(self._inner)
@@ -38,7 +68,8 @@ class IndexedAppender:
         return lib.indexed_appender_id(self._inner)
 
     def close(self):
-        lib.indexed_appender_close(self._inner)
+        self._finalizer.detach()
+        _destroy_appender(self._inner)
         self._inner = None
 
     def __enter__(self):
@@ -47,7 +78,3 @@ class IndexedAppender:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         return False
-
-    def __del__(self):
-        if hasattr(self, '_inner') and self._inner is not None:
-            lib.indexed_appender_close(self._inner)

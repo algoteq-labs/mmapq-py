@@ -5,6 +5,8 @@ import shutil
 import tempfile
 import unittest
 
+import gc
+
 from mmap_c_py import (
     NextMove,
     PollResult,
@@ -14,6 +16,13 @@ from mmap_c_py import (
     IndexedPoller,
     IndexedBatchQueue,
     IndexedBatchAppender,
+    IndexedReader,
+    IndexedBatchReader,
+    IndexedArchiver,
+    Runtime,
+    export_queue,
+    import_queue,
+    copy_queue,
     ffi,
     lib,
 )
@@ -368,6 +377,414 @@ class TestQueueType(unittest.TestCase):
     def test_schema_mismatch_error_importable(self):
         from mmap_c_py import SchemaMismatchError
         self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
+
+
+class TestReader(unittest.TestCase):
+    """Tests for random-access IndexedReader."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_reader")
+        self.q = IndexedQueue.create(self.test_dir, "rq")
+        self.a = self.q.create_appender()
+        for i in range(5):
+            self.a.append(f"msg{i}".encode())
+        self.a.close()
+
+    def tearDown(self):
+        self.q.close()
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_reader_read_by_index(self):
+        r = IndexedReader.create(self.test_dir, "rq")
+        data = r.read(2)
+        self.assertEqual(data, b"msg2")
+        r.close()
+
+    def test_reader_first_last_and_indices(self):
+        r = IndexedReader.create(self.test_dir, "rq")
+        first = r.read_first()
+        last = r.read_last()
+        self.assertEqual(first, b"msg0")
+        self.assertEqual(last, b"msg4")
+        self.assertEqual(r.last_index(), 4)
+        self.assertEqual(r.start_index(), 0)
+        r.close()
+
+    def test_reader_missing_index_returns_none(self):
+        r = IndexedReader.create(self.test_dir, "rq")
+        data = r.read(99)
+        self.assertIsNone(data)
+        r.close()
+
+    def test_reader_view_lifetime(self):
+        r = IndexedReader.create(self.test_dir, "rq")
+        view = r.read_view(0)
+        self.assertIsNotNone(view)
+        copy_before = bytes(view)
+        self.assertEqual(copy_before, b"msg0")
+        r.read(1)
+        copy_after = bytes(copy_before)
+        self.assertEqual(copy_after, b"msg0")
+        r.close()
+
+    def test_reader_closed_raises(self):
+        from mmap_c_py import QueueClosedError
+        r = IndexedReader.create(self.test_dir, "rq")
+        r.close()
+        with self.assertRaises(QueueClosedError):
+            r.read(0)
+
+
+class TestBatchReader(unittest.TestCase):
+    """Tests for random-access IndexedBatchReader."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_batch_reader")
+        self.q = IndexedBatchQueue.create(self.test_dir, "brq")
+        self.a = self.q.create_appender()
+        with self.a.start_batch() as w:
+            w.append(b"alpha")
+            w.append(b"beta")
+            w.append(b"gamma")
+            w.commit()
+        self.a.close()
+
+    def tearDown(self):
+        self.q.close()
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_batch_reader_roundtrip(self):
+        r = IndexedBatchReader.create(self.test_dir, "brq")
+        msgs = r.read(0)
+        self.assertIsNotNone(msgs)
+        self.assertEqual(len(msgs), 3)
+        self.assertEqual(msgs[0], b"alpha")
+        self.assertEqual(msgs[1], b"beta")
+        self.assertEqual(msgs[2], b"gamma")
+        r.close()
+
+
+class TestTransfer(unittest.TestCase):
+    """Tests for queue transfer (export/import/copy)."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_transfer")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_export_import_roundtrip(self):
+        src_dir = os.path.join(self.test_dir, "src")
+        dst_dir = os.path.join(self.test_dir, "dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        payloads = [f"msg{i}".encode() for i in range(10)]
+        for p in payloads:
+            a.append(p)
+        a.close()
+        q.close()
+
+        export_path = os.path.join(self.test_dir, "export.bin")
+        n = export_queue(src_dir, "q", export_path)
+        self.assertEqual(n, 10)
+
+        n = import_queue(export_path, dst_dir, "q_imported")
+        self.assertEqual(n, 10)
+
+        r = IndexedReader.create(dst_dir, "q_imported")
+        for i, expected in enumerate(payloads):
+            data = r.read(i)
+            self.assertEqual(data, expected)
+        r.close()
+
+    def test_export_to_unwritable_path_raises(self):
+        src_dir = os.path.join(self.test_dir, "src")
+        os.makedirs(src_dir)
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"test")
+        a.close()
+        q.close()
+        with self.assertRaises(OSError):
+            export_queue(src_dir, "q", "/nonexistent-dir/x.dat")
+
+
+class TestProducerCompletion(unittest.TestCase):
+    """Tests for uncommitted append, commit, and create_appender_with_id."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_prod")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_append_uncommitted_then_commit(self):
+        q = IndexedQueue.create(self.test_dir, "q")
+        a = q.create_appender()
+        p = q.create_poller()
+
+        offset = a.append_uncommitted(b"hello")
+        self.assertIsInstance(offset, int)
+
+        result = p.poll(lambda i, aid, d: NextMove.ADVANCE)
+        self.assertEqual(result, PollResult.END_OF_STREAM)
+
+        idx = a.commit(offset)
+        self.assertIsInstance(idx, int)
+
+        messages = []
+        def handler(idx, aid, data):
+            messages.append((idx, data))
+            return NextMove.ADVANCE
+        p.poll(handler)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], b"hello")
+
+        a.close()
+        p.close()
+        q.close()
+
+    def test_uncommitted_discarded_on_restart(self):
+        q = IndexedQueue.create(self.test_dir, "q")
+        a = q.create_appender()
+        a.append(b"a")
+        offset = a.append_uncommitted(b"b")
+        self.assertIsInstance(offset, int)
+        a.close()
+        q.close()
+
+        q2 = IndexedQueue.create(self.test_dir, "q")
+        a2 = q2.create_appender()
+        a2.append(b"c")
+        a2.close()
+
+        p2 = q2.create_poller()
+        messages = []
+        def handler(idx, aid, data):
+            messages.append(data)
+            return NextMove.ADVANCE
+        for _ in range(3):
+            p2.poll(handler)
+        self.assertEqual(messages, [b"a", b"c"])
+        p2.close()
+        q2.close()
+
+    def test_create_appender_with_id(self):
+        q = IndexedQueue.create(self.test_dir, "q")
+        a = q.create_appender_with_id(7)
+        self.assertEqual(a.id(), 7)
+        a.append(b"hello")
+        a.close()
+
+        p = q.create_poller()
+        messages = []
+        def handler(idx, aid, data):
+            messages.append((idx, data))
+            return NextMove.ADVANCE
+        p.poll(handler)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0][1], b"hello")
+        p.close()
+        q.close()
+
+    def test_create_appender_with_bad_id_raises(self):
+        q = IndexedQueue.create(self.test_dir, "q")
+        with self.assertRaises(ValueError):
+            q.create_appender_with_id(256)
+        q.close()
+
+
+class TestRuntime(unittest.TestCase):
+    """Tests for the Runtime class and async mapping."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_rt")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_runtime_mapper_roundtrip(self):
+        q = IndexedQueue.create(
+            self.test_dir, "rt1", runtime=Runtime.region_mapper())
+        a = q.create_appender()
+        p = q.create_poller()
+        for i in range(100):
+            a.append(f"msg{i}".encode())
+        seen = []
+        def handler(idx, aid, data):
+            seen.append(data)
+            return NextMove.ADVANCE
+        for _ in range(100):
+            p.poll(handler)
+        self.assertEqual(len(seen), 100)
+        self.assertEqual(seen[0], b"msg0")
+        self.assertEqual(seen[99], b"msg99")
+        a.close()
+        p.close()
+        q.close()
+
+    def test_runtime_kept_alive_by_queue(self):
+        rt = Runtime.region_mapper()
+        q = IndexedQueue.create(self.test_dir, "rt2", runtime=rt)
+        a = q.create_appender()
+        p = q.create_poller()
+        a.append(b"survivor")
+        del q
+        del rt
+        gc.collect()
+        messages = []
+        def handler(idx, aid, data):
+            messages.append(data)
+            return NextMove.ADVANCE
+        p.poll(handler)
+        self.assertEqual(messages, [b"survivor"])
+        a.close()
+        p.close()
+
+    def test_custom_config_region_size(self):
+        q = IndexedQueue.create(
+            self.test_dir, "rt3",
+            runtime=Runtime.region_mapper())
+        a = q.create_appender()
+        p = q.create_poller()
+        a.append(b"test")
+        messages = []
+        def handler(idx, aid, data):
+            messages.append(data)
+            return NextMove.ADVANCE
+        p.poll(handler)
+        self.assertEqual(messages, [b"test"])
+        a.close()
+        p.close()
+        q.close()
+
+
+class TestArchiver(unittest.TestCase):
+    """Tests for the IndexedArchiver."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_arch")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_archiver_on_archivable_queue(self):
+        q = IndexedQueue.create(self.test_dir, "aq", archivable=True)
+        a = q.create_appender()
+        for i in range(5):
+            a.append(f"msg{i}".encode())
+        a.close()
+
+        arch = IndexedArchiver.create(self.test_dir, "aq")
+        self.assertTrue(arch.archivable())
+        self.assertEqual(arch.start_index(), 0)
+        arch.archive_up_to_index(3)
+        self.assertEqual(arch.start_index(), 3)
+        files = arch.archivable_files()
+        self.assertIsInstance(files, list)
+        arch.close()
+        q.close()
+
+    def test_archiver_rejects_non_archivable(self):
+        q = IndexedQueue.create(self.test_dir, "naq")
+        a = q.create_appender()
+        a.append(b"test")
+        a.close()
+
+        arch = IndexedArchiver.create(self.test_dir, "naq")
+        self.assertFalse(arch.archivable())
+        with self.assertRaises(ValueError):
+            arch.archive_up_to_index(1)
+        arch.close()
+        q.close()
+
+
+class TestHandlerException(unittest.TestCase):
+    """Tests for handler exception propagation."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_exc")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_handler_exception_propagates_and_stops(self):
+        q = IndexedQueue.create(self.test_dir, "eq")
+        a = q.create_appender()
+        for i in range(5):
+            a.append(f"msg{i}".encode())
+        a.close()
+
+        p = q.create_poller()
+        calls = []
+        def handler(idx, aid, data):
+            calls.append(idx)
+            if idx == 2:
+                raise ValueError("fail at 2")
+            return NextMove.ADVANCE
+
+        p.poll(handler)
+        p.poll(handler)
+        with self.assertRaises(ValueError):
+            p.poll(handler)
+        self.assertEqual(calls, [0, 1, 2])
+
+        calls2 = []
+        def handler2(idx, aid, data):
+            calls2.append(idx)
+            return NextMove.ADVANCE
+        p.poll(handler2)
+        p.poll(handler2)
+        p.poll(handler2)
+        self.assertEqual(calls2, [2, 3, 4])
+        p.close()
+        q.close()
+
+
+class TestCloseIdempotent(unittest.TestCase):
+    """Tests that close() is idempotent on all types."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_close")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_close_idempotent_all_types(self):
+        q = IndexedQueue.create(self.test_dir, "ciq")
+        a = q.create_appender()
+        p = q.create_poller()
+        bq = IndexedBatchQueue.create(self.test_dir, "cibq")
+        ba = bq.create_appender()
+        bp = bq.create_poller()
+        r = IndexedReader.create(self.test_dir, "ciq")
+        br = IndexedBatchReader.create(self.test_dir, "cibq")
+        rt = Runtime.region_mapper()
+        arch = IndexedArchiver.create(self.test_dir, "ciq")
+
+        q.close()
+        q.close()
+        a.close()
+        a.close()
+        p.close()
+        p.close()
+        bq.close()
+        bq.close()
+        ba.close()
+        ba.close()
+        bp.close()
+        bp.close()
+        r.close()
+        r.close()
+        br.close()
+        br.close()
+        arch.close()
+        arch.close()
+        rt.close()
+        rt.close()
 
 
 if __name__ == "__main__":

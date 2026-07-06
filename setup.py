@@ -93,11 +93,13 @@ ffi.cdef("""
     IndexedQueue*    indexed_queue_create_default(
                          const char*, const char*, Runtime*, Runtime*);
     IndexedAppender* indexed_queue_create_appender(IndexedQueue*);
+    IndexedAppender* indexed_queue_create_appender_with_id(IndexedQueue*, uint8_t);
     IndexedPoller*   indexed_queue_create_poller(IndexedQueue*);
     void             indexed_queue_close(IndexedQueue*);
-
-    /* ── Single-message appender ───────────────────────────────────────────── */
     int64_t  indexed_appender_append(IndexedAppender*, const void*, int32_t);
+    int64_t  indexed_appender_append_uncommitted(
+                 IndexedAppender*, const void*, int32_t);
+    int64_t  indexed_appender_commit(IndexedAppender*, int64_t);
     int64_t  indexed_appender_current_index(const IndexedAppender*);
     uint8_t  indexed_appender_id(const IndexedAppender*);
     void     indexed_appender_close(IndexedAppender*);
@@ -166,6 +168,76 @@ ffi.cdef("""
     void          indexed_batch_appender_discard_batch(
                       IndexedBatchAppender*, int64_t);
     void          indexed_batch_appender_close(IndexedBatchAppender*);
+
+    /* ── EntryStatus (indexed_reader.h:42) ───────────────────────────────────── */
+    typedef enum {
+        ENTRY_AVAILABLE,
+        ENTRY_END_OF_STREAM,
+        ENTRY_ARCHIVED,
+        ENTRY_ERROR,
+    } EntryStatus;
+
+    /* ── IndexedReader (indexed_reader.h:68) ──────────────────────────────────── */
+    typedef struct IndexedReader IndexedReader;
+
+    IndexedReader *indexed_reader_create(
+        const char*, const char*, int, uint64_t, Runtime*);
+    ReadingContext *indexed_reader_read(
+        IndexedReader*, int64_t, ReadingContext*);
+    ReadingContext *indexed_reader_read_first(
+        IndexedReader*, ReadingContext*);
+    ReadingContext *indexed_reader_read_last(
+        IndexedReader*, ReadingContext*);
+    int64_t indexed_reader_last_index(IndexedReader*);
+    int64_t indexed_reader_start_index(IndexedReader*);
+    EntryStatus indexed_reader_entry_status(IndexedReader*, int64_t);
+    void    indexed_reader_close(IndexedReader*);
+
+    /* ── IndexedBatchReader (indexed_batch_reader.h:35) ───────────────────────── */
+    typedef struct IndexedBatchReader IndexedBatchReader;
+
+    IndexedBatchReader *indexed_batch_reader_create(
+        const char*, const char*, int, uint64_t, Runtime*);
+    BatchReadingContext *indexed_batch_reader_read(
+        IndexedBatchReader*, int64_t, BatchReadingContext*);
+    BatchReadingContext *indexed_batch_reader_read_first(
+        IndexedBatchReader*, BatchReadingContext*);
+    BatchReadingContext *indexed_batch_reader_read_last(
+        IndexedBatchReader*, BatchReadingContext*);
+    int64_t indexed_batch_reader_last_index(IndexedBatchReader*);
+    int64_t indexed_batch_reader_start_index(IndexedBatchReader*);
+    int     indexed_batch_reader_entry_status(IndexedBatchReader*, int64_t);
+    void    indexed_batch_reader_close(IndexedBatchReader*);
+
+    /* ── libc helpers for FILE* I/O ───────────────────────────────────────────── */
+    void* fopen(const char*, const char*);
+    int   fclose(void*);
+
+    /* ── Transfer (queue_transfer.h:59) ───────────────────────────────────────── */
+    typedef int (*QueueFilterFn)(int64_t, const void*, int32_t, void*);
+
+    int64_t queue_transfer_export(
+        IndexedReader*, void*, int64_t, int64_t, int,
+        QueueFilterFn, QueueFilterFn, void*);
+    int64_t queue_transfer_import(
+        void*, const char*, const char*, int64_t, Runtime*, Runtime*);
+    int64_t queue_transfer_copy(
+        IndexedReader*, const char*, const char*,
+        int64_t, int64_t, int,
+        QueueFilterFn, QueueFilterFn, void*,
+        Runtime*, Runtime*);
+
+    /* ── Archiver (indexed_archiver.h:30,48,62,90,97,122,136,145) ────────────── */
+    typedef struct IndexedArchiver IndexedArchiver;
+
+    IndexedArchiver *indexed_archiver_create(const char*, const char*, int, Runtime*);
+    int              indexed_archiver_archivable(IndexedArchiver*);
+    int              indexed_archiver_archive_up_to_index(IndexedArchiver*, int64_t);
+    int              indexed_archiver_archivable_files(
+                         IndexedArchiver*, char**, int);
+    int64_t          indexed_archiver_start_index(IndexedArchiver*);
+    int              indexed_archiver_print_summary(IndexedArchiver*, char*, int);
+    void             indexed_archiver_close(IndexedArchiver*);
 """)
 
 # ── C source files ─────────────────────────────────────────────────────────
@@ -213,6 +285,7 @@ ffi.set_source(
     #include "indexed_batch_reader.h"
     #include "runtime.h"
     #include "indexed_queue.h"
+    #include "indexed_archiver.h"
     """,
     sources=_rel_sources,
     include_dirs=[str(_rel_inc)],

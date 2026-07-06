@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import weakref
+
 from . import _cffi as _cffi_mod
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
+
+
+def _destroy_batch_appender(inner):
+    if inner is not None:
+        lib.indexed_batch_appender_close(inner)
 
 
 class BatchWriter:
@@ -78,6 +85,8 @@ class IndexedBatchAppender:
 
     def __init__(self, inner):
         self._inner = inner
+        self._runtime = None
+        self._finalizer = weakref.finalize(self, _destroy_batch_appender, inner)
 
     def start_batch(self) -> BatchWriter:
         """Start a new batch write session."""
@@ -87,7 +96,8 @@ class IndexedBatchAppender:
         return BatchWriter(self, ptr)
 
     def close(self):
-        lib.indexed_batch_appender_close(self._inner)
+        self._finalizer.detach()
+        _destroy_batch_appender(self._inner)
         self._inner = None
 
     def __enter__(self):

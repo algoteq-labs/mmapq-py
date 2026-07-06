@@ -7,11 +7,12 @@ Built with [cffi](https://cffi.readthedocs.io/) in API mode, the same architectu
 the Rust bindings (`mmap-c-rs`): a thin zero-overhead FFI layer over the C library, with
 Pythonic RAII via context managers.
 
-Python exposes the **producer/consumer subset** — append and poll for both
-single-message and batch queues — which covers the dominant Python use case
-(writing from or feeding into Python processes). Random access, transfer,
-archiving, and low-level batch construction remain C/Rust territory. See
-`doc/feature-matrix.md` in the mmap-c repository for the full matrix.
+Python exposes the **producer/consumer subset plus random-access reading
+and queue transfer** — append and poll for both single-message and batch
+queues, random-access readers for replay and analysis, and export/import/copy
+for durable long-term storage. Archiving and low-level batch construction
+remain C/Rust territory. See `doc/feature-matrix.md` in the mmap-c repository
+for the full matrix.
 
 ## Features
 
@@ -120,6 +121,7 @@ from mmap_c_py import (
     PollResult,             # Poll result: END_OF_STREAM, ADVANCED, etc.
     BatchPollResult,        # Alias for PollResult
     BatchEntryStatus,       # Batch availability
+    EntryStatus,            # Entry availability (reader)
 
     # Single-message queue
     IndexedQueue,           # Queue factory
@@ -131,6 +133,15 @@ from mmap_c_py import (
     IndexedBatchPoller,     # Sequential batch consumer
     IndexedBatchAppender,   # Batch producer
     BatchWriter,            # In-progress batch (context manager)
+
+    # Random-access readers
+    IndexedReader,          # Single-message reader
+    IndexedBatchReader,     # Batch reader
+
+    # Transfer (export/import/copy)
+    export_queue,           # Export queue to flat stream
+    import_queue,           # Import flat stream to queue
+    copy_queue,             # Copy queue to new directory
 )
 ```
 
@@ -168,6 +179,20 @@ def handler(batch_index, ctx):
     # data is the first message payload
     return NextMove.ADVANCE
 ```
+
+### Additional appender methods
+
+`IndexedAppender` also provides:
+
+- **`append_uncommitted(data)`** — writes payload without committing. Invisible to readers,
+  discarded by crash recovery. Returns a payload offset for later use with `commit()`.
+- **`commit(payload_offset)`** — publishes a previously uncommitted payload. Returns the
+  committed index.
+
+`IndexedQueue` also provides:
+
+- **`create_appender_with_id(appender_id)`** — creates an appender with a specific lane ID
+  (0–255). Raises `ValueError` if the ID is out of range.
 
 ## Examples
 

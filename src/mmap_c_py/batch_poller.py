@@ -8,8 +8,6 @@ to iterate messages, then return a NextMove directive.
 
 from __future__ import annotations
 
-import threading
-import traceback
 from typing import Callable
 
 from . import _cffi as _cffi_mod
@@ -18,49 +16,26 @@ ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 from .types import NextMove, PollResult
 
-# ── Global handler registry ────────────────────────────────────────────────
-#
-# cffi callbacks are C function pointers — they cannot capture Python closures.
-# Instead, we register Python handlers in a global dict and pass a unique
-# integer token through the void* ctx parameter.
 
-_lock = threading.Lock()
-_next_token = 0
-_handlers: dict[int, Callable] = {}
+def _destroy_batch_poller(inner):
+    if inner is not None:
+        lib.indexed_batch_poller_close(inner)
 
 
-def _register(handler: Callable) -> int:
-    global _next_token
-    with _lock:
-        _next_token += 1
-        token = _next_token
-        _handlers[token] = handler
-        return token
-
-
-def _unregister(token: int) -> None:
-    with _lock:
-        _handlers.pop(token, None)
-
-
-# ── C-callable trampoline ──────────────────────────────────────────────────
-
-@ffi.callback("NextMove(int64_t, BatchReadingContext*, void*)")
+@ffi.callback("NextMove(int64_t, BatchReadingContext*, void*)",
+              error=NextMove.STOP)
 def _c_trampoline(batch_index, ctx_ptr, user_data):
-    """Called from C — dispatches to the registered Python handler."""
-    # user_data is a void* encoding the integer token
-    token = ffi.cast("intptr_t", user_data)
-    handler = _handlers.get(token)
+    """Called from C — dispatches to the poller's current handler."""
+    poller = ffi.from_handle(user_data)
+    handler = poller._current_handler
     if handler is None:
         return NextMove.STOP
     try:
         return handler(batch_index, ctx_ptr)
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        poller._pending_exc = e
         return NextMove.STOP
 
-
-# ── IndexedBatchPoller ─────────────────────────────────────────────────────
 
 class IndexedBatchPoller:
     """Sequential batch consumer.
@@ -70,7 +45,10 @@ class IndexedBatchPoller:
 
     def __init__(self, inner):
         self._inner = inner
-        self._handler_token = None
+        self._runtime = None
+        self._handle = ffi.new_handle(self)
+        self._current_handler = None
+        self._pending_exc = None
 
     def poll(self, handler):
         """Poll the next batch, delivering it to the handler.
@@ -84,63 +62,46 @@ class IndexedBatchPoller:
         before reading data.
 
         Returns a PollResult describing what happened.
+        Raises the handler's exception if one was raised during delivery.
         """
-        token = _register(handler)
-        self._handler_token = token
+        self._current_handler = handler
+        self._pending_exc = None
         try:
             result = lib.indexed_batch_poller_poll(
                 self._inner,
                 _c_trampoline,
-                ffi.cast("void*", token),
+                self._handle,
             )
+            if self._pending_exc is not None:
+                exc = self._pending_exc
+                self._pending_exc = None
+                raise exc
+            return PollResult(result)
         finally:
-            _unregister(token)
-            self._handler_token = None
-        return PollResult(result)
+            self._current_handler = None
 
     def move_to_index(self, index: int) -> bool:
-        """Move the cursor to a specific batch index.
-
-        Returns True if the index is valid (>= start_index).
-        """
         return bool(lib.indexed_batch_poller_move_to_index(self._inner, index))
 
     def move_to_end(self) -> bool:
-        """Move the cursor to one past the last committed batch.
-
-        After this, poll() returns END_OF_STREAM until a new batch arrives.
-        """
         return bool(lib.indexed_batch_poller_move_to_end(self._inner))
 
     def move_to_last_existing_batch(self) -> bool:
-        """Move the cursor to the last committed batch.
-
-        Unlike move_to_end(), this positions AT the last valid batch.
-        Returns True if a committed batch exists.
-        """
         return bool(lib.indexed_batch_poller_move_to_last_existing_batch(self._inner))
 
     def move_to_start(self) -> bool:
-        """Move the cursor to the first unarchived batch index."""
         return bool(lib.indexed_batch_poller_move_to_start(self._inner))
 
     def current_batch_index(self) -> int:
-        """Return the current batch index (cursor position)."""
         return lib.indexed_batch_poller_current_batch_index(self._inner)
 
     def start_index(self) -> int:
-        """Return the first unarchived batch index (lowest readable)."""
         return lib.indexed_batch_poller_start_index(self._inner)
 
     def exists(self, batch_index: int) -> bool:
-        """Return True if a committed batch exists at the given index.
-
-        Does not alter the cursor.
-        """
         return bool(lib.indexed_batch_poller_exists(self._inner, batch_index))
 
     def close(self):
-        """Close the poller and release associated resources."""
         if self._inner is not None:
             lib.indexed_batch_poller_close(self._inner)
             self._inner = None
