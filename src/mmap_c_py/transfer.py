@@ -27,6 +27,7 @@ def export_queue(directory: str, queue_name: str, dest_path: str, *,
     all entries in [from_index, to_index] range. The stream format
     includes a 64-byte ExportMeta header followed by framed entries.
 
+    Uses default reader configuration (ring_size=4, timeout_ns=10s).
     Filtering is not supported in v1 — all entries in range are exported.
 
     Args:
@@ -76,7 +77,7 @@ def import_queue(src_path: str, directory: str,
     Returns:
         Number of entries imported.
     """
-    src = lib.fopen(src_path.encode(), "rb".encode())
+    src = lib.fopen(src_path.encode(), b"rb")
     if not src:
         raise OSError(f"cannot open {src_path!r} for reading")
     try:

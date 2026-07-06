@@ -434,6 +434,12 @@ class TestReader(unittest.TestCase):
         with self.assertRaises(QueueClosedError):
             r.read(0)
 
+    def test_read_view_error_paths_match_read(self):
+        r = IndexedReader.create(self.test_dir, "rq")
+        self.assertIsNone(r.read(99))
+        self.assertIsNone(r.read_view(99))
+        r.close()
+
 
 class TestBatchReader(unittest.TestCase):
     """Tests for random-access IndexedBatchReader."""
@@ -767,24 +773,34 @@ class TestCloseIdempotent(unittest.TestCase):
 
         q.close()
         q.close()
+        del q; gc.collect()
         a.close()
         a.close()
+        del a; gc.collect()
         p.close()
         p.close()
+        del p; gc.collect()
         bq.close()
         bq.close()
+        del bq; gc.collect()
         ba.close()
         ba.close()
+        del ba; gc.collect()
         bp.close()
         bp.close()
+        del bp; gc.collect()
         r.close()
         r.close()
+        del r; gc.collect()
         br.close()
         br.close()
+        del br; gc.collect()
         arch.close()
         arch.close()
+        del arch; gc.collect()
         rt.close()
         rt.close()
+        del rt; gc.collect()
 
 
 if __name__ == "__main__":

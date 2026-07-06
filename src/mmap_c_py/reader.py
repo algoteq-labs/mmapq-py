@@ -80,6 +80,8 @@ class IndexedReader:
         index is beyond the last committed entry or has been archived.
         Raises QueueCorruptError on corruption, RuntimeError on I/O error.
         """
+        if index < 0:
+            raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
         lib.indexed_reader_read(self._inner, index, self._ctx)
         return self._extract()
@@ -103,25 +105,22 @@ class IndexedReader:
         reader. Do not store it; copy with bytes(view) if you need the
         data beyond the next call.
         """
+        if index < 0:
+            raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
         lib.indexed_reader_read(self._inner, index, self._ctx)
-        status = self._ctx.status
-        if status == EntryStatus.AVAILABLE:
-            buf = ffi.buffer(self._ctx.data, self._ctx.length)
-            return memoryview(buf)
-        elif status == EntryStatus.END_OF_STREAM:
-            return None
-        elif status == EntryStatus.ARCHIVED:
-            return None
-        else:
-            raise RuntimeError(
-                f"indexed_reader_read: ENTRY_ERROR at index {index}")
+        self._check_status()
+        if self._ctx.status == EntryStatus.AVAILABLE:
+            return memoryview(ffi.buffer(self._ctx.data, self._ctx.length))
+        return None
 
     def entry_status(self, index: int) -> EntryStatus:
         """Check availability of the entry at the given index.
 
         Lightweight check that does not populate a ReadingContext.
         """
+        if index < 0:
+            raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
         return EntryStatus(lib.indexed_reader_entry_status(self._inner, index))
 
@@ -138,7 +137,8 @@ class IndexedReader:
     def close(self) -> None:
         """Close the reader and release mapped regions. Idempotent."""
         if self._inner is not None:
-            lib.indexed_reader_close(self._inner)
+            self._finalizer.detach()
+            _destroy_reader(self._inner)
             self._inner = None
             self._ctx = None
 
@@ -146,20 +146,25 @@ class IndexedReader:
         if self._inner is None:
             raise QueueClosedError("IndexedReader is closed")
 
-    def _extract(self) -> Optional[bytes]:
+    def _check_status(self):
         status = self._ctx.status
+        if status == EntryStatus.END_OF_STREAM:
+            return
+        if status == EntryStatus.ARCHIVED:
+            return
         if status == EntryStatus.AVAILABLE:
-            return bytes(ffi.buffer(self._ctx.data, self._ctx.length))
-        elif status == EntryStatus.END_OF_STREAM:
-            return None
-        elif status == EntryStatus.ARCHIVED:
-            return None
-        elif status == EntryStatus.ERROR:
+            return
+        if status == EntryStatus.ERROR:
             raise RuntimeError(
                 "indexed_reader_read: ENTRY_ERROR (mapping timeout or I/O failure)")
-        else:
-            raise QueueCorruptError(
-                f"indexed_reader_read: unknown status {status}")
+        raise QueueCorruptError(
+            f"indexed_reader_read: unknown status {status}")
+
+    def _extract(self) -> Optional[bytes]:
+        self._check_status()
+        if self._ctx.status == EntryStatus.AVAILABLE:
+            return bytes(ffi.buffer(self._ctx.data, self._ctx.length))
+        return None
 
     def __enter__(self):
         return self
@@ -233,6 +238,8 @@ class IndexedBatchReader:
 
         Returns a BatchEntryStatus value.
         """
+        if index < 0:
+            raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
         return lib.indexed_batch_reader_entry_status(self._inner, index)
 
