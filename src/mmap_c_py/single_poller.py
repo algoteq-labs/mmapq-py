@@ -13,6 +13,7 @@ from . import _cffi as _cffi_mod
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 from .types import NextMove, PollResult
+from ._errors import QueueCorruptError
 
 
 def _destroy_poller(inner):
@@ -70,6 +71,8 @@ class IndexedPoller:
                 exc = self._pending_exc
                 self._pending_exc = None
                 raise exc
+            if result == PollResult.CORRUPT:
+                raise QueueCorruptError("poll: committed payload data is corrupt")
             return PollResult(result)
         finally:
             self._current_handler = None

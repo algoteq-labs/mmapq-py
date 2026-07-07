@@ -31,6 +31,8 @@ class PollResult(enum.IntEnum):
     """Current index is below the queue's start index (archived)."""
     ERROR = 5
     """Mapping timeout or I/O error."""
+    CORRUPT = 6
+    """Committed payload data is corrupt."""
 
 
 # Alias matching C's `typedef PollResult BatchPollResult`.

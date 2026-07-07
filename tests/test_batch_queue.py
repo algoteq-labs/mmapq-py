@@ -255,6 +255,22 @@ class TestSingleQueue(unittest.TestCase):
         a.close()
         q.close()
 
+    def test_poll_corrupt_payload_raises(self):
+        from mmap_c_py import QueueCorruptError
+        q = IndexedQueue.create(self.test_dir, "sq_corrupt")
+        a = q.create_appender()
+        a.append(b"hello")
+        a.close()
+        payload_path = os.path.join(self.test_dir, "sq_corrupt", "payload_0_0")
+        with open(payload_path, "r+b") as f:
+            f.seek(64)
+            f.write(b"\x00\x00\x00\x00")
+        p = q.create_poller()
+        with self.assertRaises(QueueCorruptError):
+            p.poll(lambda i, a, d: NextMove.ADVANCE)
+        p.close()
+        q.close()
+
     def test_move_and_exists(self):
         q = IndexedQueue.create(self.test_dir, "sq_move")
         a = q.create_appender()
