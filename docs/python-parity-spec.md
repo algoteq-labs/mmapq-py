@@ -1,4 +1,4 @@
-# Implementation Spec: mmap-c-py feature parity
+# Implementation Spec: mmapq feature parity
 
 **Audience:** implementing model/engineer with access to all three
 repositories, WITHOUT prior design context. All design decisions are made
@@ -6,8 +6,8 @@ here. Where this spec and your judgment disagree, the spec wins — flag the
 disagreement in your summary. All AGENTS.md rules apply, including the
 completion-report format and under-claiming.
 
-**Goal:** raise `mmap-c-py` from the producer/consumer subset to near-parity
-with `mmap-c-rs`, per `mmap-c/doc/feature-matrix.md`. This is wrapper parity
+**Goal:** raise `mmapq` from the producer/consumer subset to near-parity
+with `mmapq-rs`, per `mmapq/doc/feature-matrix.md`. This is wrapper parity
 over existing C capability — the sanctioned category. **No C code changes
 in this spec.** The C library is used as-is.
 
@@ -46,8 +46,8 @@ N's acceptance passes. Report per phase.
   existing class pattern (`setUp` temp dir, `tearDown` rmtree). A test not
   visible in `-v` runner output does not exist. Every phase's report
   quotes the new `-v` lines and the new total.
-- **Docs:** each phase updates `mmap-c-py/README.md` (the coverage
-  section) and `mmap-c/doc/feature-matrix.md` (flip the affected Python
+- **Docs:** each phase updates `mmapq-py/README.md` (the coverage
+  section) and `mmapq/doc/feature-matrix.md` (flip the affected Python
   cells, adjusting the subset paragraph in BOTH places in the final phase).
   Matrix maintenance is mandatory per AGENTS.md.
 
@@ -174,7 +174,7 @@ Tests (new class `TestReader`, `TestTransfer`):
 ## 1.5 Phase 1 acceptance
 
 - Runner shows the 7 names; total = previous + 7.
-- `python3 -c "from mmap_c_py import IndexedReader, export_queue"` works.
+- `python3 -c "from mmapq import IndexedReader, export_queue"` works.
 - README coverage section + feature matrix Python cells for reader and
   transfer flipped (matrix: ✓ for read-at-index/first-last/status/
   last_index, batch reader; ✓ for export/import/copy; chunked per 1.1).
@@ -359,7 +359,7 @@ public behavior).
 ## Final acceptance (after Phase 4)
 
 1. Full suite: previous total + ~16 new tests, all named in `-v` output.
-2. `python3 -c "import mmap_c_py; print(sorted(mmap_c_py.__all__))"`
+2. `python3 -c "import mmapq; print(sorted(mmapq.__all__))"`
    output included in the report.
 3. C suite and Rust suite green (unchanged; run anyway).
 4. Feature matrix and both README coverage sections consistent with each

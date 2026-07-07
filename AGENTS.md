@@ -1,8 +1,8 @@
-# AGENTS.md — mmap-c-py
+# AGENTS.md — mmapq
 
 Instructions for AI coding agents working in this repository.
 
-**This package wraps `mmap-c`. Read `mmap-c/AGENTS.md` first** (sibling
+**This package wraps `mmapq`. Read `mmapq/AGENTS.md` first** (sibling
 repo). Every upstream rule about frozen scope, on-disk layout, error codes,
 testing discipline, and completion reporting applies here unchanged. Where
 this file and upstream's differ, upstream wins.
@@ -26,7 +26,7 @@ The two upstream rules restated because violating them is unrecoverable:
   configuration of the C library. Validation that exists only as
   `MMAP_ASSERT` upstream does not exist here at all; this is why input
   validation in the Python layer is mandatory, not defensive decoration.
-- C sources are located relative to this repo (sibling `../mmap-c`, or a
+- C sources are located relative to this repo (sibling `../mmapq`, or a
   vendored copy when packaging lands). Do not modify C sources from this
   repo — C changes are made upstream and flow here; see the workspace
   AGENTS.md for the sync protocol.

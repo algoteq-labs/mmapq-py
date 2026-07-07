@@ -1,4 +1,4 @@
-"""Error types and return-code mapping for mmap-c-py operations."""
+"""Error types and return-code mapping for mmapq operations."""
 
 from __future__ import annotations
 

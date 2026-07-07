@@ -1,17 +1,17 @@
-# mmap-c-py
+# mmapq
 
-Python bindings for mmap-c — a low-latency,
+Python bindings for mmapq — a low-latency,
 memory-mapped, shared-memory indexed queue for inter-process messaging on Linux.
 
 Built with [cffi](https://cffi.readthedocs.io/) in API mode, the same architecture as
-the Rust bindings (`mmap-c-rs`): a thin zero-overhead FFI layer over the C library, with
+the Rust bindings (`mmapq-rs`): a thin zero-overhead FFI layer over the C library, with
 Pythonic RAII via context managers.
 
 Python exposes the **producer/consumer subset plus random-access reading
 and queue transfer** — append and poll for both single-message and batch
 queues, random-access readers for replay and analysis, and export/import/copy
 for durable long-term storage. Archiving and low-level batch construction
-remain C/Rust territory. See `doc/feature-matrix.md` in the mmap-c repository
+remain C/Rust territory. See `doc/feature-matrix.md` in the mmapq repository
 for the full matrix.
 
 ## Features
@@ -28,7 +28,7 @@ for the full matrix.
 ### Single-message queue
 
 ```python
-from mmap_c_py import IndexedQueue, NextMove
+from mmapq import IndexedQueue, NextMove
 
 queue = IndexedQueue.create("/dev/shm", "my_queue")
 appender = queue.create_appender()
@@ -52,7 +52,7 @@ queue.close()
 ### Batch queue
 
 ```python
-from mmap_c_py import IndexedBatchQueue, NextMove
+from mmapq import IndexedBatchQueue, NextMove
 
 queue = IndexedBatchQueue.create("/dev/shm", "my_batch_queue")
 appender = queue.create_appender()
@@ -81,7 +81,7 @@ queue.close()
 ## Installation
 
 ```bash
-pip install mmap-c-py
+pip install mmapq
 ```
 
 Requires **Python 3.10+**, **Linux x86-64**, and **GCC** (for compiling the C extension at install time).
@@ -90,7 +90,7 @@ Requires **Python 3.10+**, **Linux x86-64**, and **GCC** (for compiling the C ex
 
 ```bash
 git clone --recursive <repo-url>
-cd mmap-c-py
+cd mmapq
 pip install -e .
 ```
 
@@ -115,7 +115,7 @@ operations, payload reads, and region mapping happen in C code compiled by cffi.
 ### Exports
 
 ```python
-from mmap_c_py import (
+from mmapq import (
     # Shared types
     NextMove,               # Handler return: ADVANCE, STOP, RETREAT
     PollResult,             # Poll result: END_OF_STREAM, ADVANCED, etc.
@@ -166,7 +166,7 @@ def handler(batch_index, ctx):
     # ctx.status — BatchEntryStatus
 
     # Access messages via the iterator:
-    from mmap_c_py import ffi, lib
+    from mmapq import ffi, lib
     it = ffi.addressof(ctx.batch_iterator)
 
     if not lib.batch_iterator_advance(it):
@@ -222,7 +222,7 @@ Expected throughput on isolated cores: **100,000–200,000 ops/sec** (vs 2.8M fo
 
 This is the right tool when you need:
 - Cross-process queue compatibility with existing C/Rust/Algoteq Java deployments
-- Python process integration into an existing mmap-c pipeline
+- Python process integration into an existing mmapq pipeline
 - Prototyping or testing with batch queue semantics
 
 For production throughput at scale, use the C or Rust bindings directly.
@@ -235,7 +235,7 @@ python -m unittest discover tests
 
 ## Acknowledgements
 
-mmap-c-py is a Python port of Algoteq's mmap-c,
+mmapq is a Python port of Algoteq's mmapq,
 which was derived from the [tools4j/mmap](https://github.com/tools4j/mmap) Java library.
 
 ## License

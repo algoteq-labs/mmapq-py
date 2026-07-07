@@ -19,7 +19,7 @@ import threading
 import time
 import struct
 
-from mmap_c_py import IndexedBatchQueue, NextMove, PollResult, ffi, lib
+from mmapq import IndexedBatchQueue, NextMove, PollResult, ffi, lib
 
 SHUTDOWN_SEQ = 0
 LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence

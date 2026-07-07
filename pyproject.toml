@@ -3,9 +3,9 @@ requires = ["setuptools", "cffi"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mmap-c-py"
+name = "mmapq"
 version = "0.1.0"
-description = "Python bindings for mmap-c — low-latency memory-mapped queue"
+description = "Python bindings for mmapq — low-latency memory-mapped queue"
 requires-python = ">=3.10"
 dependencies = []
 

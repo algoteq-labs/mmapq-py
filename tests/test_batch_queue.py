@@ -1,4 +1,4 @@
-"""Tests for mmap-c-py — single-message and batch queue bindings."""
+"""Tests for mmapq — single-message and batch queue bindings."""
 
 import os
 import shutil
@@ -7,7 +7,7 @@ import unittest
 
 import gc
 
-from mmap_c_py import (
+from mmapq import (
     NextMove,
     PollResult,
     BatchPollResult,
@@ -256,7 +256,7 @@ class TestSingleQueue(unittest.TestCase):
         q.close()
 
     def test_poll_corrupt_payload_raises(self):
-        from mmap_c_py import QueueCorruptError
+        from mmapq import QueueCorruptError
         q = IndexedQueue.create(self.test_dir, "sq_corrupt")
         a = q.create_appender()
         a.append(b"hello")
@@ -324,7 +324,7 @@ class TestErrors(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_append_empty_raises_value_error(self):
-        from mmap_c_py import IndexedQueue
+        from mmapq import IndexedQueue
         q = IndexedQueue.create(self.test_dir, "err_empty")
         a = q.create_appender()
         with self.assertRaises(ValueError):
@@ -333,7 +333,7 @@ class TestErrors(unittest.TestCase):
         q.close()
 
     def test_exception_types_importable(self):
-        from mmap_c_py import QueueClosedError, QueueCorruptError, SchemaMismatchError
+        from mmapq import QueueClosedError, QueueCorruptError, SchemaMismatchError
         self.assertTrue(issubclass(QueueClosedError, RuntimeError))
         self.assertTrue(issubclass(QueueCorruptError, RuntimeError))
         self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
@@ -391,7 +391,7 @@ class TestQueueType(unittest.TestCase):
             bq.create_appender()
 
     def test_schema_mismatch_error_importable(self):
-        from mmap_c_py import SchemaMismatchError
+        from mmapq import SchemaMismatchError
         self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
 
 
@@ -444,7 +444,7 @@ class TestReader(unittest.TestCase):
         r.close()
 
     def test_reader_closed_raises(self):
-        from mmap_c_py import QueueClosedError
+        from mmapq import QueueClosedError
         r = IndexedReader.create(self.test_dir, "rq")
         r.close()
         with self.assertRaises(QueueClosedError):
@@ -770,7 +770,7 @@ class TestCloseIdempotent(unittest.TestCase):
     """Tests that close() is idempotent on all types."""
 
     def setUp(self):
-        self.test_dir = tempfile.mkdtemp(suffix="_mmap_close")
+        self.test_dir = tempfile.mkdtemp(suffix="_mmapq_close")
 
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)

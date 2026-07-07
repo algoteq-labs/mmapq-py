@@ -1,4 +1,4 @@
-"""mmap-c-py — Python bindings for the mmap-c batch queue."""
+"""mmapq — Python bindings for the mmapq batch queue."""
 
 from . import _cffi as _cffi_mod
 

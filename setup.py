@@ -1,6 +1,6 @@
-"""cffi API-mode build for mmap-c-py.
+"""cffi API-mode build for mmapq.
 
-Compiles the mmap-c C library into a Python C extension.
+Compiles the mmapq C library into a Python C extension.
 """
 
 import glob
@@ -244,15 +244,15 @@ ffi.cdef("""
 #
 # Paths must be relative to setup.py for setuptools compatibility.
 # Expected layout:
-#   mmap-c-py/setup.py
-#   mmap-c/          (sibling — the C library)
+#   mmapq-py/setup.py
+#   mmapq/           (sibling — the C library)
 #
 # Fallback: look inside a c/ submodule at the same level.
 
 import glob  # noqa: F811
 
 _script_dir = Path(__file__).resolve().parent
-_c_dir = _script_dir.parent / "mmap-c"
+_c_dir = _script_dir.parent / "mmapq"
 if not _c_dir.exists():
     _c_dir = _script_dir / "c"
 
@@ -267,7 +267,7 @@ c_sources = sorted(str(p) for p in _c_src_dir.glob("*.c"))
 if not c_sources:
     raise SystemExit(
         f"ERROR: no C sources found in {_c_src_dir}. "
-        "Make sure the mmap-c submodule is checked out."
+        "Make sure the mmapq submodule is checked out."
     )
 
 # Convert absolute paths to relative for setuptools compatibility.
@@ -275,7 +275,7 @@ if not c_sources:
 _rel_sources = [os.path.relpath(p, _script_dir) for p in c_sources]
 
 ffi.set_source(
-    "mmap_c_py._cffi",
+    "mmapq._cffi",
     """
     #include "header_codec.h"
     #include "batch_payload_iterator.h"
@@ -295,10 +295,10 @@ ffi.set_source(
 )
 
 setup(
-    name="mmap-c-py",
+    name="mmapq",
     version="0.1.0",
-    description="Python bindings for mmap-c — low-latency memory-mapped queue",
-    packages=["mmap_c_py"],
+    description="Python bindings for mmapq — low-latency memory-mapped queue",
+    packages=["mmapq"],
     package_dir={"": "src"},
     ext_modules=[ffi.distutils_extension()],
     python_requires=">=3.10",
