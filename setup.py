@@ -298,6 +298,7 @@ setup(
     name="mmapq",
     version="0.1.0",
     description="Python bindings for mmapq — low-latency memory-mapped queue",
+    license="BSD 2-Clause",
     packages=["mmapq"],
     package_dir={"": "src"},
     ext_modules=[ffi.distutils_extension()],

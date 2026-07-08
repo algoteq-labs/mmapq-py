@@ -1,82 +1,95 @@
 # mmapq
 
-Python bindings for mmapq — a low-latency,
-memory-mapped, shared-memory indexed queue for inter-process messaging on Linux.
+[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD_2--Clause-blue.svg)](LICENSE)
 
-Built with [cffi](https://cffi.readthedocs.io/) in API mode, the same architecture as
-the Rust bindings (`mmapq-rs`): a thin zero-overhead FFI layer over the C library, with
-Pythonic RAII via context managers.
+**Python bindings for [mmapq](https://github.com/anton-anufriev/mmapq)** — a persistent,
+indexed, replayable inter-process queue backed by memory-mapped files. No
+broker, no daemon; the queue is just files.
 
-Python exposes the **producer/consumer subset plus random-access reading
-and queue transfer** — append and poll for both single-message and batch
-queues, random-access readers for replay and analysis, and export/import/copy
-for durable long-term storage. Archiving and low-level batch construction
-remain C/Rust territory. See `doc/feature-matrix.md` in the mmapq repository
-for the full matrix.
+## Why Python for a sub-microsecond queue?
 
-## Features
+Not for the hot path — for the *read* side. The pattern mmapq is built for
+fast producers (C or Rust: market data, sequenced commands, sensor and
+telemetry streams) on one side of a persistent, indexed log, and lets any
+number of consumers read that log independently. Python is the natural
+language for the consumer: replay, analysis, notebooks, dashboards,
+projections into pandas — over the exact same queue files the fast
+producers write, with no serialization bridge, no message broker, and no
+copy out of shared memory beyond the one `bytes()` you ask for.
 
-- **Zero-copy** — messages are read directly from mapped memory through the C library
-- **Batch queue** — group multiple messages under a single atomic commit with per-batch callback delivery
-- **RAII via context managers** — `BatchWriter` auto-rolls back on error when used with `with`
-- **Cross-process** — share queues between Python, C, Rust, and Algoteq Java processes on the same machine
-- **C-ABI compatible** — identical wire format and protocol as Algoteq's Java implementation (tools4j-derived; NOT compatible with upstream tools4j)
-- **Panic-safe callbacks** — Python exceptions in handlers are caught and logged without crashing the process
+Because the queue is indexed and replayable, the Python side gets the
+capability the whole architecture exists for: **replay is the product.**
+Copy a queue directory from production to a laptop and re-read it from index
+zero — the same operation that drives recovery and replication is also how
+you debug, backtest, and audit. "What did command K do" is a single indexed
+read from a Python script. `doc/event-sourcing-guide.md` in the
+[mmapq](https://github.com/anton-anufriev/mmapq) repository describes the
+full pattern; `doc/feature-matrix.md` gives exact coverage across C, Rust,
+and Python.
 
-## Quick Start
+## Quick start
 
 ### Single-message queue
 
 ```python
 from mmapq import IndexedQueue, NextMove
 
-queue = IndexedQueue.create("/dev/shm", "my_queue")
-appender = queue.create_appender()
-poller = queue.create_poller()
+q = IndexedQueue.create("/dev/shm", "my_queue")
 
-# Append a message (committed atomically)
-appender.append(b"hello world")
+appender = q.create_appender()
+appender.append(b"hello world")        # committed atomically
 
-# Poll for the message
 def handler(index, appender_id, data):
-    print(f"[{index}] {data}")
+    print(f"[{index}] {data!r}")
     return NextMove.ADVANCE
 
+poller = q.create_poller()
 poller.poll(handler)
-
-appender.close()
-poller.close()
-queue.close()
 ```
 
-### Batch queue
+### Batch queue (atomic multi-message commit)
 
 ```python
 from mmapq import IndexedBatchQueue, NextMove
 
-queue = IndexedBatchQueue.create("/dev/shm", "my_batch_queue")
-appender = queue.create_appender()
+q = IndexedBatchQueue.create("/dev/shm", "events")
+appender = q.create_appender()
 
-# Append a batch with three messages (single atomic commit)
-with appender.start_batch() as writer:
-    writer.append(b"hello")
-    writer.append(b"world")
-    writer.append(b"!")
-    writer.commit()
-
-# Poll for the batch
-poller = queue.create_poller()
-
-def handler(batch_index, ctx):
-    print(f"Batch {batch_index}: {ctx.message_count} messages")
-    return NextMove.ADVANCE
-
-poller.poll(handler)
-
-poller.close()
-appender.close()
-queue.close()
+with appender.start_batch() as batch:      # context manager = transaction
+    batch.append(b"event 1")
+    batch.append(b"event 2")
+    batch.append(b"event 3")
+# leaving the block without an exception commits the batch atomically;
+# an exception inside the block discards it — the events never become
+# visible. This is the command/event rollback semantics in one construct.
 ```
+
+### Reading and replay (random access)
+
+```python
+from mmapq import IndexedReader, export_queue
+
+reader = IndexedReader.create("/dev/shm", "events")
+first = reader.read_first()              # bytes | None
+last  = reader.read_last()
+msg   = reader.read(42)                  # read any committed index
+print(reader.last_index())
+
+# Export the durable stream for long-term storage or offline analysis:
+export_queue("/dev/shm", "events", "/data/events-2026-07.mmapq")
+```
+
+## A note on validation and safety
+
+The Python extension compiles the C library with `-DNDEBUG`, so it runs the
+*release* build with internal asserts stripped. Input validation therefore
+happens in the Python layer and is mandatory, not defensive decoration:
+empty appends, out-of-range indices, and closed-handle use are checked
+before the FFI call and raise `ValueError` / `QueueClosedError`. Corruption
+detected on open or during a poll raises `QueueCorruptError` (distinct from
+a transient timeout) rather than returning silently. Every wrapper object
+supports explicit `close()`, is a context manager, and is finalized safely
+at interpreter shutdown.
 
 ## Installation
 
@@ -84,31 +97,11 @@ queue.close()
 pip install mmapq
 ```
 
-Requires **Python 3.10+**, **Linux x86-64**, and **GCC** (for compiling the C extension at install time).
-
 ### From source
 
 ```bash
-git clone --recursive <repo-url>
-cd mmapq
-pip install -e .
+pip install -e .        # builds the cffi extension against the C sources
 ```
-
-## Architecture
-
-The underlying C library stores messages in two file types:
-
-- **Header file** (one per queue): 8-byte atomically-committed entries spaced 512 bytes
-  apart (vertical walk layout). Each header encodes an appender ID and a payload offset
-  in a single 64-bit CAS word.
-- **Payload files** (one per appender): `[int32 length][payload bytes]` framing, with a
-  message count prefix for batches.
-
-The vertical walk layout (index N at offset N × 512) ensures consecutive writes by
-multiple appenders land on separate cache lines, avoiding false sharing.
-
-Python interacts with these files exclusively through the C library — all header CAS
-operations, payload reads, and region mapping happen in C code compiled by cffi.
 
 ## API
 
@@ -199,50 +192,74 @@ def handler(batch_index, ctx):
 ### Batch echo server
 
 ```bash
-# Terminal 1: start the echo server
-python examples/batch_echo_server.py /tmp batch_req batch_res
-
-# Terminal 2: run the latency benchmark
-python examples/batch_latency_bench.py 100000 10000 64 --external
+rm -rf /tmp/request /tmp/response
+python3 examples/batch_echo_server.py /tmp request response &
+python3 examples/batch_latency_bench.py 100000 10000 64 --external
 ```
 
 ### Internal benchmark (single process)
 
 ```bash
-python examples/batch_latency_bench.py 100000 10000 64
+rm -rf /tmp/request /tmp/response
+python3 examples/batch_latency_bench.py 100000 10000 64
 ```
 
 ## Performance
 
-The Python layer adds approximately **1–2 µs** per `poll()` call through the cffi callback
-trampoline (C → Python → C dispatch). The underlying C library delivers ~300 ns median
-round-trip at the C level, but Python's interpreter overhead dominates the hot path.
+The Python layer adds roughly **1–2 µs** per `poll()` call through the cffi
+callback trampoline (C → Python → C dispatch); the C library itself delivers
+~300 ns median round-trip, so the interpreter dominates the hot path.
+Expected throughput on isolated cores is **100,000–200,000 ops/sec** against
+~2.8M for C. This is by design and not the point: Python is the consumer and
+analysis language here, not the low-latency producer.
 
-Expected throughput on isolated cores: **100,000–200,000 ops/sec** (vs 2.8M for C).
+Reach for the Python bindings when you want:
 
-This is the right tool when you need:
-- Cross-process queue compatibility with existing C/Rust/Algoteq Java deployments
-- Python process integration into an existing mmapq pipeline
-- Prototyping or testing with batch queue semantics
+- A Python consumer, projection, or analysis process reading a log that C or
+  Rust producers write — the replay/notebook/dashboard side of an
+  event-sourced pipeline.
+- Cross-process compatibility with existing C, Rust, or Algoteq Java
+  deployments sharing a queue.
+- Replay, export, and offline forensics over recorded queues.
+- Prototyping and testing with the real wire format.
 
-For production throughput at scale, use the C or Rust bindings directly.
+For low-latency *production* on the hot path, produce from the C or Rust
+bindings; let Python read.
+
+## Compatibility
+
+The wire format is identical to the C library and the Rust bindings, and
+compatible with Algoteq's Java implementation (tools4j-derived; **not**
+compatible with upstream tools4j — the formats have diverged). Batch queues
+are a C-ecosystem feature and are not read by Java.
+
+## Stability
+
+The wire format and feature set are **frozen**: queue files written today
+remain readable by every future version, and the API grows only to complete
+parity with the Algoteq Java reference. The Python bindings expose the
+producer/consumer and replay surface; some low-level batch construction
+primitives remain C/Rust only (see `doc/feature-matrix.md`).
 
 ## Testing
 
 ```bash
-python -m unittest discover tests
+python3 -m unittest discover tests
 ```
 
 ## Acknowledgements
 
-mmapq is a Python port of Algoteq's mmapq,
-which was derived from the [tools4j/mmap](https://github.com/tools4j/mmap) Java library.
+`mmapq-py` wraps Algoteq's mmapq, originally derived from the
+[tools4j/mmap](https://github.com/tools4j/mmap) Java library. The
+event-sourcing architecture follows
+[tools4j/event-sourcing](https://github.com/tools4j/event-sourcing) and
+[elara](https://github.com/tools4j/elara).
 
 ## License
 
-MIT
+BSD 2-Clause — see [LICENSE](LICENSE).
 
 ## Platform
 
-Linux only. Requires naturally aligned lock-free atomics over `MAP_SHARED`
-mmap — guaranteed on x86-64 and ARM64.
+Linux only (x86-64, ARM64). Requires naturally aligned lock-free atomics
+over `MAP_SHARED` mmap.

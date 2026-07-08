@@ -74,6 +74,7 @@ def main():
         with appender.start_batch() as writer:
             writer.append(data)
             writer.append_remaining_from(it)
+            writer.commit()
 
         return NextMove.ADVANCE
 

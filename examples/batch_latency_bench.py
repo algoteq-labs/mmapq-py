@@ -80,7 +80,7 @@ class BatchLatencyProbe:
     """Client-side probe that sends a request and waits for the echo."""
 
     def __init__(self, instance_id, msg_size, directory,
-                 request_name="batch_req", response_name="batch_res"):
+                 request_name="request", response_name="response"):
         self.instance_id = instance_id
         self.msg_size = msg_size
         self.current_seq = 0
@@ -171,8 +171,8 @@ class BatchLatencyProbe:
 
 
 def internal_server(directory,
-                    request_name="batch_req",
-                    response_name="batch_res",
+                    request_name="request",
+                    response_name="response",
                     server_cpu=-1):
     """Internal echo server thread."""
     if server_cpu >= 0:
@@ -202,6 +202,7 @@ def internal_server(directory,
         with appender.start_batch() as writer:
             writer.append(data)
             writer.append_remaining_from(it)
+            writer.commit()
 
         return NextMove.ADVANCE
 
@@ -270,7 +271,7 @@ def main():
     if not external_server:
         server_thread = threading.Thread(
             target=internal_server,
-            args=(directory, "batch_req", "batch_res", server_cpu),
+            args=(directory, "request", "response", server_cpu),
             daemon=True,
         )
         server_thread.start()
@@ -282,7 +283,7 @@ def main():
 
     probe = BatchLatencyProbe(
         1, msg_size, directory,
-        request_name="batch_req", response_name="batch_res",
+        request_name="request", response_name="response",
     )
 
     print("Warming up...")
