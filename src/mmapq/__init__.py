@@ -10,6 +10,7 @@ from ._errors import (
     QueueClosedError,
     QueueCorruptError,
     SchemaMismatchError,
+    QueueExistsError,
     check_rc,
 )
 from .types import (
@@ -25,7 +26,10 @@ from .batch_queue import IndexedBatchQueue
 from .batch_poller import IndexedBatchPoller
 from .batch_appender import IndexedBatchAppender, BatchWriter
 from .reader import IndexedReader, IndexedBatchReader, EntryStatus
-from .transfer import export_queue, import_queue, copy_queue
+from .transfer import (
+    export_queue, import_queue, import_batch_stream, import_flat_to_batch,
+    copy_queue, copy_batch_queue, copy_normal_to_batch, copy_batch_to_normal,
+)
 from .runtime import Runtime
 from .archiver import IndexedArchiver
 
@@ -46,10 +50,16 @@ __all__ = [
     "EntryStatus",
     "export_queue",
     "import_queue",
+    "import_batch_stream",
+    "import_flat_to_batch",
     "copy_queue",
+    "copy_batch_queue",
+    "copy_normal_to_batch",
+    "copy_batch_to_normal",
     "Runtime",
     "IndexedArchiver",
     "QueueClosedError",
     "QueueCorruptError",
     "SchemaMismatchError",
+    "QueueExistsError",
 ]

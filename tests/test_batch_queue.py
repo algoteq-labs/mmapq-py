@@ -20,9 +20,15 @@ from mmapq import (
     IndexedBatchReader,
     IndexedArchiver,
     Runtime,
+    QueueExistsError,
     export_queue,
     import_queue,
     copy_queue,
+    copy_batch_queue,
+    copy_normal_to_batch,
+    copy_batch_to_normal,
+    import_batch_stream,
+    import_flat_to_batch,
     ffi,
     lib,
 )
@@ -333,10 +339,11 @@ class TestErrors(unittest.TestCase):
         q.close()
 
     def test_exception_types_importable(self):
-        from mmapq import QueueClosedError, QueueCorruptError, SchemaMismatchError
+        from mmapq import QueueClosedError, QueueCorruptError, SchemaMismatchError, QueueExistsError
         self.assertTrue(issubclass(QueueClosedError, RuntimeError))
         self.assertTrue(issubclass(QueueCorruptError, RuntimeError))
         self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
+        self.assertTrue(issubclass(QueueExistsError, RuntimeError))
 
 
 class TestArchivable(unittest.TestCase):
@@ -533,6 +540,406 @@ class TestTransfer(unittest.TestCase):
         with self.assertRaises(OSError):
             export_queue(src_dir, "q", "/nonexistent-dir/x.dat")
 
+    def test_import_allow_append_false(self):
+        src_dir = os.path.join(self.test_dir, "src")
+        dst_dir = os.path.join(self.test_dir, "dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"test")
+        a.close()
+        q.close()
+
+        export_path = os.path.join(self.test_dir, "export.bin")
+        export_queue(src_dir, "q", export_path)
+
+        # First import succeeds
+        import_queue(export_path, dst_dir, "q")
+
+        # Second import without allow_append should fail
+        with self.assertRaises(QueueExistsError):
+            import_queue(export_path, dst_dir, "q")
+
+    def test_import_allow_append_true(self):
+        src_dir = os.path.join(self.test_dir, "src")
+        dst_dir = os.path.join(self.test_dir, "dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"msg1")
+        a.append(b"msg2")
+        a.close()
+        q.close()
+
+        export_path = os.path.join(self.test_dir, "export.bin")
+        export_queue(src_dir, "q", export_path)
+
+        import_queue(export_path, dst_dir, "q")
+        n = import_queue(export_path, dst_dir, "q", allow_append=True)
+        self.assertEqual(n, 2)
+
+    def test_copy_queue_with_allow_append(self):
+        src_dir = os.path.join(self.test_dir, "src")
+        dst_dir = os.path.join(self.test_dir, "dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"data")
+        a.close()
+        q.close()
+
+        copy_queue(src_dir, "q", dst_dir, "q_copy")
+        n = copy_queue(src_dir, "q", dst_dir, "q_copy", allow_append=True)
+        self.assertEqual(n, 1)
+
+    def test_copy_batch_queue(self):
+        src_dir = os.path.join(self.test_dir, "bsrc")
+        dst_dir = os.path.join(self.test_dir, "bdst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = IndexedBatchQueue.create(src_dir, "bq")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"batch_msg")
+            w.commit()
+        a.close()
+        q.close()
+
+        n = copy_batch_queue(src_dir, "bq", dst_dir, "bq_copy")
+        self.assertEqual(n, 1)
+
+    def test_copy_batch_to_normal(self):
+        src_dir = os.path.join(self.test_dir, "b2n_src")
+        dst_dir = os.path.join(self.test_dir, "b2n_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = IndexedBatchQueue.create(src_dir, "bq")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"m1")
+            w.append(b"m2")
+            w.commit()
+        a.close()
+        q.close()
+
+        n = copy_batch_to_normal(src_dir, "bq", dst_dir, "normal")
+        self.assertEqual(n, 2)
+
+    def test_copy_normal_to_batch(self):
+        src_dir = os.path.join(self.test_dir, "n2b_src")
+        dst_dir = os.path.join(self.test_dir, "n2b_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"n2b_1")
+        a.append(b"n2b_2")
+        a.close()
+        q.close()
+
+        n = copy_normal_to_batch(src_dir, "q", dst_dir, "batch")
+        self.assertEqual(n, 2)
+
+    def test_export_preserve(self):
+        src_dir = os.path.join(self.test_dir, "ep_src")
+        dst_dir = os.path.join(self.test_dir, "ep_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"ep_test")
+        a.close()
+        q.close()
+        export_path = os.path.join(self.test_dir, "ep_export.bin")
+        n = export_queue(src_dir, "q", export_path, preserve=True)
+        self.assertEqual(n, 1)
+        # Import back and verify index space
+        n = import_queue(export_path, dst_dir, "q_reloaded", preserve=True)
+        self.assertEqual(n, 1)
+        r = IndexedReader.create(dst_dir, "q_reloaded")
+        self.assertEqual(r.start_index(), 0)
+        self.assertIsNotNone(r.read(0))
+        r.close()
+
+    def test_import_preserve(self):
+        src_dir = os.path.join(self.test_dir, "ip_src")
+        dst_dir = os.path.join(self.test_dir, "ip_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"preserve_test")
+        a.close()
+        q.close()
+        export_path = os.path.join(self.test_dir, "ip_export.bin")
+        export_queue(src_dir, "q", export_path)
+        n = import_queue(export_path, dst_dir, "q_imported",
+                         start_index=0, preserve=True)
+        self.assertEqual(n, 1)
+        # Verify index space
+        r = IndexedReader.create(dst_dir, "q_imported")
+        self.assertEqual(r.start_index(), 0)
+        self.assertIsNotNone(r.read(0))
+        r.close()
+
+    def test_copy_preserve(self):
+        src_dir = os.path.join(self.test_dir, "cp_src")
+        dst_dir = os.path.join(self.test_dir, "cp_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"cp_test")
+        a.close()
+        q.close()
+        n = copy_queue(src_dir, "q", dst_dir, "q_copy", preserve=True)
+        self.assertEqual(n, 1)
+        # Verify index space
+        r = IndexedReader.create(dst_dir, "q_copy")
+        self.assertEqual(r.start_index(), 0)
+        self.assertIsNotNone(r.read(0))
+        r.close()
+
+        src_dir = os.path.join(self.test_dir, "bcp_src")
+        dst_dir = os.path.join(self.test_dir, "bcp_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedBatchQueue.create(src_dir, "bq")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"bcp_msg")
+            w.commit()
+        a.close()
+        q.close()
+        n = copy_batch_queue(src_dir, "bq", dst_dir, "bq_copy", preserve=True)
+        self.assertEqual(n, 1)
+        # Verify index space
+        r = IndexedBatchReader.create(dst_dir, "bq_copy")
+        self.assertEqual(r.start_index(), 0)
+        r.close()
+
+    def test_batch_copy_preserve_to_new(self):
+        src_dir = os.path.join(self.test_dir, "bcp_src")
+        dst_dir = os.path.join(self.test_dir, "bcp_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedBatchQueue.create(src_dir, "bq")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"bcp_msg")
+            w.commit()
+        a.close()
+        q.close()
+        n = copy_batch_queue(src_dir, "bq", dst_dir, "bq_copy", preserve=True)
+        self.assertEqual(n, 1)
+        r = IndexedBatchReader.create(dst_dir, "bq_copy")
+        self.assertEqual(r.start_index(), 0)
+        r.close()
+
+    def test_import_batch_stream_preserve_to_new(self):
+        src_dir = os.path.join(self.test_dir, "ibs_src")
+        dst_dir = os.path.join(self.test_dir, "ibs_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedBatchQueue.create(src_dir, "bq")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"ibs_msg")
+            w.commit()
+        a.close()
+        q.close()
+
+        export_path = os.path.join(self.test_dir, "ibs_export.bin")
+        br = IndexedBatchReader.create(src_dir, "bq")
+        f = lib.fopen(export_path.encode(), "wb".encode())
+        lib.batch_queue_transfer_export(br._inner, f, 0, 0, 1, ffi.NULL, ffi.NULL, ffi.NULL)
+        lib.fclose(f)
+        br.close()
+
+        n = import_batch_stream(export_path, dst_dir, "q_restored", preserve=True)
+        self.assertEqual(n, 1)
+        # Verify index space
+        r = IndexedReader.create(dst_dir, "q_restored")
+        self.assertEqual(r.start_index(), 0)
+        self.assertIsNotNone(r.read(0))
+        r.close()
+
+    def test_import_flat_to_batch_preserve_to_new(self):
+        src_dir = os.path.join(self.test_dir, "ifb_src")
+        dst_dir = os.path.join(self.test_dir, "ifb_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"ifb_msg")
+        a.close()
+        q.close()
+
+        export_path = os.path.join(self.test_dir, "ifb_export.bin")
+        export_queue(src_dir, "q", export_path, preserve=True)
+
+        n = import_flat_to_batch(export_path, dst_dir, "q_restored", preserve=True)
+        self.assertEqual(n, 1)
+        # Verify index space
+        r = IndexedBatchReader.create(dst_dir, "q_restored")
+        self.assertEqual(r.start_index(), 0)
+        r.close()
+
+    def test_copy_batch_to_normal_preserve(self):
+        src_dir = os.path.join(self.test_dir, "b2np_src")
+        dst_dir = os.path.join(self.test_dir, "b2np_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedBatchQueue.create(src_dir, "bq")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"b2np_1")
+            w.append(b"b2np_2")
+            w.commit()
+        a.close()
+        q.close()
+        n = copy_batch_to_normal(src_dir, "bq", dst_dir, "normal", preserve=True)
+        self.assertEqual(n, 2)
+        # Verify index space
+        r = IndexedReader.create(dst_dir, "normal")
+        self.assertEqual(r.start_index(), 0)
+        self.assertIsNotNone(r.read(0))
+        r.close()
+
+    def test_copy_normal_to_batch_preserve(self):
+        src_dir = os.path.join(self.test_dir, "n2bp_src")
+        dst_dir = os.path.join(self.test_dir, "n2bp_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        q = IndexedQueue.create(src_dir, "q")
+        a = q.create_appender()
+        a.append(b"n2bp_1")
+        a.append(b"n2bp_2")
+        a.close()
+        q.close()
+        n = copy_normal_to_batch(src_dir, "q", dst_dir, "batch", preserve=True)
+        self.assertEqual(n, 2)
+        # Verify index space
+        r = IndexedBatchReader.create(dst_dir, "batch")
+        self.assertEqual(r.start_index(), 0)
+        r.close()
+
+    def test_copy_batch_to_normal_preserve_nonzero(self):
+        src_dir = os.path.join(self.test_dir, "b2nz_src")
+        dst_dir = os.path.join(self.test_dir, "b2nz_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        # Create batch queue with start_index=100 via C API
+        bq = lib.indexed_batch_queue_create(
+            src_dir.encode(), b"bq", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            ffi.NULL, ffi.NULL)
+        ba = lib.indexed_batch_queue_create_appender(bq)
+        mb = lib.indexed_batch_appender_start_batch(ba)
+        lib.mutable_batch_append(mb, b"hello", 5)
+        off = lib.mutable_batch_complete(mb)
+        lib.indexed_batch_appender_commit_batch(ba, off)
+        lib.indexed_batch_appender_close(ba)
+        lib.indexed_batch_queue_close(bq)
+
+        n = copy_batch_to_normal(src_dir, "bq", dst_dir, "normal", preserve=True)
+        self.assertEqual(n, 1)
+        r = IndexedReader.create(dst_dir, "normal")
+        self.assertEqual(r.start_index(), 100)
+        self.assertIsNotNone(r.read(100))
+        r.close()
+
+    def test_copy_normal_to_batch_preserve_nonzero(self):
+        src_dir = os.path.join(self.test_dir, "n2bz_src")
+        dst_dir = os.path.join(self.test_dir, "n2bz_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        # Create normal queue with start_index=100 via C API
+        q = lib.indexed_queue_create(
+            src_dir.encode(), b"q", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            ffi.NULL, ffi.NULL)
+        a = lib.indexed_queue_create_appender(q)
+        lib.indexed_appender_append(a, b"world", 5)
+        lib.indexed_appender_close(a)
+        lib.indexed_queue_close(q)
+
+        n = copy_normal_to_batch(src_dir, "q", dst_dir, "batch", preserve=True)
+        self.assertEqual(n, 1)
+        r = IndexedBatchReader.create(dst_dir, "batch")
+        self.assertEqual(r.start_index(), 100)
+        r.close()
+
+    def test_import_batch_stream_preserve_nonzero(self):
+        src_dir = os.path.join(self.test_dir, "py_ibs_nz")
+        dst_dir = os.path.join(self.test_dir, "py_ibs_nz_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        bq = lib.indexed_batch_queue_create(
+            src_dir.encode(), b"bq", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            ffi.NULL, ffi.NULL)
+        ba = lib.indexed_batch_queue_create_appender(bq)
+        mb = lib.indexed_batch_appender_start_batch(ba)
+        lib.mutable_batch_append(mb, b"test", 4)
+        off = lib.mutable_batch_complete(mb)
+        lib.indexed_batch_appender_commit_batch(ba, off)
+        lib.indexed_batch_appender_close(ba)
+        lib.indexed_batch_queue_close(bq)
+
+        export_path = os.path.join(self.test_dir, "ibs_export.bin")
+        br = IndexedBatchReader.create(src_dir, "bq")
+        f = lib.fopen(export_path.encode(), "wb".encode())
+        lib.batch_queue_transfer_export(br._inner, f, 100, 100, 1, ffi.NULL, ffi.NULL, ffi.NULL)
+        lib.fclose(f)
+        br.close()
+
+        n = import_batch_stream(export_path, dst_dir, "q", start_index=100, preserve=True)
+        self.assertEqual(n, 1)
+        r = IndexedReader.create(dst_dir, "q")
+        self.assertEqual(r.start_index(), 100)
+        self.assertIsNotNone(r.read(100))
+        r.close()
+
+    def test_import_flat_to_batch_preserve_nonzero(self):
+        src_dir = os.path.join(self.test_dir, "py_ifb_nz")
+        dst_dir = os.path.join(self.test_dir, "py_ifb_nz_dst")
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+
+        q = lib.indexed_queue_create(
+            src_dir.encode(), b"q", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            ffi.NULL, ffi.NULL)
+        a = lib.indexed_queue_create_appender(q)
+        lib.indexed_appender_append(a, b"test", 4)
+        lib.indexed_appender_close(a)
+        lib.indexed_queue_close(q)
+
+        export_path = os.path.join(self.test_dir, "ifb_export.bin")
+        export_queue(src_dir, "q", export_path, preserve=True)
+
+        n = import_flat_to_batch(export_path, dst_dir, "bq", start_index=100, preserve=True)
+        self.assertEqual(n, 1)
+        r = IndexedBatchReader.create(dst_dir, "bq")
+        self.assertEqual(r.start_index(), 100)
+        r.close()
+
+    def test_import_preserve_append_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            import_queue("/nonexistent", self.test_dir, "q", preserve=True, allow_append=True)
+
+    def test_copy_preserve_append_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            copy_queue("/nonexistent", "q", self.test_dir, "q", preserve=True, allow_append=True)
 
 class TestProducerCompletion(unittest.TestCase):
     """Tests for uncommitted append, commit, and create_appender_with_id."""
