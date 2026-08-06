@@ -15,12 +15,22 @@ class SchemaMismatchError(RuntimeError):
     """Schema version or queue type mismatch on open."""
 
 
+class QueueExistsError(RuntimeError):
+    """The destination queue already exists and allow_append was not set."""
+
+class AppenderIdConflictError(RuntimeError):
+    """The mapped appender ID is already in use by the destination queue."""
+
+
 _RC_ERRORS = {
-    -1: (RuntimeError, "mapping timed out or I/O error"),
-    -2: (ValueError, "invalid argument"),
-    -3: (QueueClosedError, "queue/appender is closed"),
-    -4: (QueueCorruptError, "on-disk corruption detected"),
+    -8: (AppenderIdConflictError, "appender ID already in use"),
+    -7: (FileNotFoundError, "file or queue does not exist"),
+    -6: (QueueExistsError, "destination queue already exists"),
     -5: (SchemaMismatchError, "schema version or queue type mismatch"),
+    -4: (QueueCorruptError, "on-disk corruption detected"),
+    -3: (QueueClosedError, "queue/appender is closed"),
+    -2: (ValueError, "invalid argument"),
+    -1: (RuntimeError, "mapping timed out or I/O error"),
 }
 
 

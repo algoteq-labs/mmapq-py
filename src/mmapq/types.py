@@ -50,3 +50,12 @@ class BatchEntryStatus(enum.IntEnum):
     """The batch was archived and is no longer accessible."""
     ERROR = 3
     """A mapping timeout or I/O error occurred."""
+
+
+class ConflictBehavior(enum.IntEnum):
+    """What to do when a mapped appender ID is already in use."""
+
+    AUTO = 0
+    """Fall back to auto-assign (default, always succeeds)."""
+    ABORT = 1
+    """Return AppenderIdConflictError on conflict."""
