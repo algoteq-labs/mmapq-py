@@ -61,6 +61,8 @@ ffi.cdef("""
         BatchEntryStatus     status;
         int64_t              batch_offset;
         int32_t              message_count;
+        uint8_t              appender_id;
+        uint8_t              reserved[3];
         BatchPayloadIterator batch_iterator;
     } BatchReadingContext;
 
@@ -217,25 +219,32 @@ ffi.cdef("""
     typedef int (*QueueFilterFn)(int64_t, const void*, int32_t, void*);
     typedef int (*BatchQueueFilterFn)(int64_t, int32_t, int32_t, const void*, int32_t, void*);
 
+    #define APPENDER_ID_AUTO -1
+    typedef int32_t (*AppenderIdMapper)(uint16_t, void*);
+
     int64_t queue_transfer_export(
         IndexedReader*, void*, int64_t, int64_t, int,
         QueueFilterFn, QueueFilterFn, void*);
     int64_t queue_transfer_import(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
     int64_t queue_transfer_import_batch_stream(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
     int64_t queue_transfer_copy(
         IndexedReader*, const char*, const char*,
         int64_t, int64_t, int,
         QueueFilterFn, QueueFilterFn, void*,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
     int64_t queue_transfer_copy_batch_to_normal(
         IndexedBatchReader*, const char*, const char*,
         int64_t, int64_t, int,
         BatchQueueFilterFn, BatchQueueFilterFn, void*,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
 
     /* ── Batch transfer (batch_queue_transfer.h) ──────────────────────────────── */
     int64_t batch_queue_transfer_export(
@@ -243,20 +252,24 @@ ffi.cdef("""
         BatchQueueFilterFn, BatchQueueFilterFn, void*);
     int64_t batch_queue_transfer_import(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
     int64_t batch_queue_transfer_import_flat_stream(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
     int64_t batch_queue_transfer_copy(
         IndexedBatchReader*, const char*, const char*,
         int64_t, int64_t, int,
         BatchQueueFilterFn, BatchQueueFilterFn, void*,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
     int64_t batch_queue_transfer_copy_normal_to_batch(
         IndexedReader*, const char*, const char*,
         int64_t, int64_t, int,
         BatchQueueFilterFn, BatchQueueFilterFn, void*,
-        Runtime*, Runtime*, int);
+        Runtime*, Runtime*, int,
+        AppenderIdMapper, void*, int);
 
     /* ── Archiver (indexed_archiver.h:30,48,62,90,97,122,136,145) ────────────── */
     typedef struct IndexedArchiver IndexedArchiver;
@@ -317,6 +330,7 @@ ffi.set_source(
     #include "runtime.h"
     #include "indexed_queue.h"
     #include "indexed_archiver.h"
+    #include "queue_transfer.h"
     """,
     sources=_rel_sources,
     include_dirs=[str(_rel_inc)],

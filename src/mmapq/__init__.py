@@ -7,6 +7,7 @@ ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 
 from ._errors import (
+    AppenderIdConflictError,
     QueueClosedError,
     QueueCorruptError,
     SchemaMismatchError,
@@ -18,6 +19,7 @@ from .types import (
     PollResult,
     BatchPollResult,
     BatchEntryStatus,
+    ConflictBehavior,
 )
 from .single_queue import IndexedQueue
 from .single_appender import IndexedAppender
@@ -27,7 +29,10 @@ from .batch_poller import IndexedBatchPoller
 from .batch_appender import IndexedBatchAppender, BatchWriter
 from .reader import IndexedReader, IndexedBatchReader, EntryStatus
 from .transfer import (
-    export_queue, import_queue, import_batch_stream, import_flat_to_batch,
+    APPENDER_ID_AUTO,
+    export_queue, export_batch_queue,
+    import_queue, import_batch_stream, import_batch_queue,
+    import_flat_to_batch,
     copy_queue, copy_batch_queue, copy_normal_to_batch, copy_batch_to_normal,
 )
 from .runtime import Runtime
@@ -38,6 +43,8 @@ __all__ = [
     "PollResult",
     "BatchPollResult",
     "BatchEntryStatus",
+    "ConflictBehavior",
+    "APPENDER_ID_AUTO",
     "IndexedQueue",
     "IndexedAppender",
     "IndexedPoller",
@@ -49,8 +56,10 @@ __all__ = [
     "IndexedBatchReader",
     "EntryStatus",
     "export_queue",
+    "export_batch_queue",
     "import_queue",
     "import_batch_stream",
+    "import_batch_queue",
     "import_flat_to_batch",
     "copy_queue",
     "copy_batch_queue",
@@ -62,4 +71,5 @@ __all__ = [
     "QueueCorruptError",
     "SchemaMismatchError",
     "QueueExistsError",
+    "AppenderIdConflictError",
 ]

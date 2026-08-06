@@ -47,6 +47,7 @@ class IndexedReader:
         self._inner = inner
         self._runtime = runtime
         self._ctx = ffi.new("ReadingContext *")
+        self._last_read_valid = False
         self._finalizer = weakref.finalize(self, _destroy_reader, inner)
 
     @classmethod
@@ -111,7 +112,9 @@ class IndexedReader:
         lib.indexed_reader_read(self._inner, index, self._ctx)
         self._check_status()
         if self._ctx.status == EntryStatus.AVAILABLE:
+            self._last_read_valid = True
             return memoryview(ffi.buffer(self._ctx.data, self._ctx.length))
+        self._last_read_valid = False
         return None
 
     def entry_status(self, index: int) -> EntryStatus:
@@ -160,10 +163,28 @@ class IndexedReader:
         raise QueueCorruptError(
             f"indexed_reader_read: unknown status {status}")
 
+    def appender_id(self) -> int:
+        """Return the appender ID of the last entry read.
+
+        Valid only after a ``read()``, ``read_first()``, or ``read_last()``
+        call whose result was not None.
+
+        Raises:
+            QueueClosedError: the reader has been closed.
+            RuntimeError: no valid read has been performed yet.
+        """
+        self._check_open()
+        if not self._last_read_valid:
+            raise RuntimeError(
+                "no valid read performed — call read() first and check result")
+        return self._ctx.appender_id
+
     def _extract(self) -> Optional[bytes]:
         self._check_status()
         if self._ctx.status == EntryStatus.AVAILABLE:
+            self._last_read_valid = True
             return bytes(ffi.buffer(self._ctx.data, self._ctx.length))
+        self._last_read_valid = False
         return None
 
     def __enter__(self):
@@ -186,6 +207,7 @@ class IndexedBatchReader:
         self._inner = inner
         self._runtime = runtime
         self._ctx = ffi.new("BatchReadingContext *")
+        self._last_read_valid = False
         self._finalizer = weakref.finalize(self, _destroy_batch_reader, inner)
 
     @classmethod
@@ -243,6 +265,23 @@ class IndexedBatchReader:
         self._check_open()
         return lib.indexed_batch_reader_entry_status(self._inner, index)
 
+    def batch_appender_id(self) -> int:
+        """Return the appender ID of the last batch read.
+
+        Valid only after a ``read()``, ``read_first()``, or ``read_last()``
+        call whose result was not None. Returns the per-lane ID (0–255)
+        of the appender that wrote the batch.
+
+        Raises:
+            QueueClosedError: the reader has been closed.
+            RuntimeError: no valid batch read has been performed yet.
+        """
+        self._check_open()
+        if not self._last_read_valid:
+            raise RuntimeError(
+                "no valid batch read performed — call read() first and check result")
+        return self._ctx.appender_id
+
     def last_index(self) -> int:
         """Highest committed batch index, or -1 if the queue is empty."""
         self._check_open()
@@ -269,6 +308,7 @@ class IndexedBatchReader:
         from .types import BatchEntryStatus
         status = self._ctx.status
         if status == BatchEntryStatus.AVAILABLE:
+            self._last_read_valid = True
             messages = []
             it_ptr = ffi.addressof(self._ctx.batch_iterator)
             while lib.batch_iterator_advance(it_ptr):
@@ -276,10 +316,12 @@ class IndexedBatchReader:
                 data_ptr = lib.batch_iterator_current_data_ffi(it_ptr)
                 messages.append(bytes(ffi.buffer(data_ptr, length)))
             return messages
-        elif status in (BatchEntryStatus.END_OF_STREAM,
-                        BatchEntryStatus.ARCHIVED):
+        else:
+            self._last_read_valid = False
+        if status in (BatchEntryStatus.END_OF_STREAM,
+                      BatchEntryStatus.ARCHIVED):
             return None
-        elif status == BatchEntryStatus.ERROR:
+        if status == BatchEntryStatus.ERROR:
             raise RuntimeError(
                 "indexed_batch_reader_read: ENTRY_ERROR "
                 "(mapping timeout or I/O failure)")

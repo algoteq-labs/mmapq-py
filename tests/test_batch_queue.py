@@ -21,14 +21,18 @@ from mmapq import (
     IndexedArchiver,
     Runtime,
     QueueExistsError,
+    AppenderIdConflictError,
+    ConflictBehavior,
     export_queue,
+    export_batch_queue,
     import_queue,
+    import_batch_queue,
+    import_batch_stream,
+    import_flat_to_batch,
     copy_queue,
     copy_batch_queue,
     copy_normal_to_batch,
     copy_batch_to_normal,
-    import_batch_stream,
-    import_flat_to_batch,
     ffi,
     lib,
 )
@@ -463,6 +467,27 @@ class TestReader(unittest.TestCase):
         self.assertIsNone(r.read_view(99))
         r.close()
 
+    def test_appender_id_after_read(self):
+        r = IndexedReader.create(self.test_dir, "rq")
+        data = r.read(0)
+        self.assertIsNotNone(data)
+        aid = r.appender_id()
+        self.assertIsInstance(aid, int)
+        r.close()
+
+    def test_appender_id_before_read_raises(self):
+        r = IndexedReader.create(self.test_dir, "rq")
+        with self.assertRaises(RuntimeError):
+            r.appender_id()
+        r.close()
+
+    def test_appender_id_closed_raises(self):
+        from mmapq import QueueClosedError
+        r = IndexedReader.create(self.test_dir, "rq")
+        r.close()
+        with self.assertRaises(QueueClosedError):
+            r.appender_id()
+
 
 class TestBatchReader(unittest.TestCase):
     """Tests for random-access IndexedBatchReader."""
@@ -491,6 +516,19 @@ class TestBatchReader(unittest.TestCase):
         self.assertEqual(msgs[1], b"beta")
         self.assertEqual(msgs[2], b"gamma")
         r.close()
+
+    def test_batch_appender_id_before_read_raises(self):
+        r = IndexedBatchReader.create(self.test_dir, "brq")
+        with self.assertRaises(RuntimeError):
+            r.batch_appender_id()
+        r.close()
+
+    def test_batch_appender_id_closed_raises(self):
+        from mmapq import QueueClosedError
+        r = IndexedBatchReader.create(self.test_dir, "brq")
+        r.close()
+        with self.assertRaises(QueueClosedError):
+            r.batch_appender_id()
 
 
 class TestTransfer(unittest.TestCase):
@@ -940,6 +978,232 @@ class TestTransfer(unittest.TestCase):
     def test_copy_preserve_append_raises_value_error(self):
         with self.assertRaises(ValueError):
             copy_queue("/nonexistent", "q", self.test_dir, "q", preserve=True, allow_append=True)
+
+    # ── Appender ID preservation tests ────────────────────────────────────
+
+    def test_import_preserves_appender_ids(self):
+        q = IndexedQueue.create(self.test_dir, "aid_preserve")
+        a0 = q.create_appender()
+        a1 = q.create_appender()
+        id0 = a0.id()
+        id1 = a1.id()
+        self.assertNotEqual(id0, id1)
+        a0.append(b"from-a0")
+        a1.append(b"from-a1")
+        a0.append(b"from-a0-2")
+        a0.close(); a1.close()
+
+        dest = tempfile.mkdtemp(suffix="_aid_preserve")
+        try:
+            export_queue(self.test_dir, "aid_preserve",
+                         os.path.join(self.test_dir, "export.bin"),
+                         preserve=False)
+            n = import_queue(os.path.join(self.test_dir, "export.bin"),
+                             dest, "q",
+                             mapper=None,
+                             on_conflict=ConflictBehavior.AUTO)
+            self.assertEqual(n, 3)
+
+            # Verify both appender IDs are present in the imported queue
+            r = IndexedReader.create(dest, "q")
+            seen0 = seen1 = False
+            for i in range(r.last_index() + 1):
+                msg = r.read(i)
+                if msg is not None:
+                    app_id = r.appender_id()
+                    if app_id == id0:
+                        seen0 = True
+                    if app_id == id1:
+                        seen1 = True
+            self.assertTrue(seen0 and seen1)
+            r.close()
+        finally:
+            shutil.rmtree(dest)
+        q.close()
+
+    def test_import_merge_via_mapper(self):
+        q = IndexedQueue.create(self.test_dir, "aid_merge")
+        a0 = q.create_appender()
+        a1 = q.create_appender()
+        a0.append(b"from-a0")
+        a1.append(b"from-a1")
+        a0.close(); a1.close()
+
+        dest = tempfile.mkdtemp(suffix="_aid_merge")
+        try:
+            export_queue(self.test_dir, "aid_merge",
+                         os.path.join(self.test_dir, "export.bin"),
+                         preserve=False)
+            n = import_queue(os.path.join(self.test_dir, "export.bin"),
+                             dest, "q",
+                             mapper=lambda aid: -1 if aid > 0 else 0,
+                             on_conflict=ConflictBehavior.AUTO)
+            self.assertEqual(n, 2)
+        finally:
+            shutil.rmtree(dest)
+        q.close()
+
+    def test_import_auto_on_conflict(self):
+        q = IndexedQueue.create(self.test_dir, "aid_auto_conflict")
+        existing = q.create_appender_with_id(0)
+
+        q_src = IndexedQueue.create(self.test_dir, "aid_auto_src")
+        a = q_src.create_appender()
+        a.append(b"hello")
+        a.close()
+        export_queue(self.test_dir, "aid_auto_src",
+                     os.path.join(self.test_dir, "export_src.bin"),
+                     preserve=False)
+
+        n = import_queue(os.path.join(self.test_dir, "export_src.bin"),
+                         self.test_dir, "aid_auto_conflict",
+                         allow_append=True, mapper=None,
+                         on_conflict=ConflictBehavior.AUTO)
+        self.assertEqual(n, 1)
+
+        existing.close()
+        q.close()
+        q_src.close()
+
+    def test_import_abort_on_conflict(self):
+        q = IndexedQueue.create(self.test_dir, "aid_abort")
+        existing = q.create_appender_with_id(0)
+
+        q_src = IndexedQueue.create(self.test_dir, "aid_abort_src")
+        a = q_src.create_appender()
+        a.append(b"hello")
+        a.close()
+        export_queue(self.test_dir, "aid_abort_src",
+                     os.path.join(self.test_dir, "export_abort.bin"),
+                     preserve=False)
+
+        with self.assertRaises(AppenderIdConflictError):
+            import_queue(os.path.join(self.test_dir, "export_abort.bin"),
+                         self.test_dir, "aid_abort",
+                         allow_append=True, mapper=None,
+                         on_conflict=ConflictBehavior.ABORT)
+        existing.close()
+        q.close()
+        q_src.close()
+
+    def test_batch_import_preserves_appender_ids(self):
+        q = IndexedBatchQueue.create(self.test_dir, "batch_aid")
+        a1 = q.create_appender()
+        a2 = q.create_appender()
+        with a1.start_batch() as w:
+            w.append(b"a1"); w.commit()
+        with a2.start_batch() as w:
+            w.append(b"a2"); w.commit()
+        a1.close(); a2.close()
+
+        ep = os.path.join(self.test_dir, "export.dat")
+        export_batch_queue(self.test_dir, "batch_aid", ep, preserve=False)
+
+        dest = tempfile.mkdtemp(suffix="_batch_aid")
+        try:
+            n = import_batch_queue(ep, dest, "q",
+                                   mapper=None,
+                                   on_conflict=ConflictBehavior.AUTO)
+            self.assertEqual(n, 2)
+
+            r = IndexedBatchReader.create(dest, "q")
+            try:
+                r.read(0)
+                got0 = r.batch_appender_id()
+                r.read(1)
+                got1 = r.batch_appender_id()
+                self.assertNotEqual(got0, got1)
+            finally:
+                r.close()
+        finally:
+            shutil.rmtree(dest)
+        q.close()
+
+    def test_import_mapper_exception_falls_back_to_auto(self):
+        q = IndexedQueue.create(self.test_dir, "aid_mapper_err")
+        a = q.create_appender()
+        a.append(b"hello")
+        a.close()
+
+        dest = tempfile.mkdtemp(suffix="_aid_mapper_err")
+        try:
+            export_queue(self.test_dir, "aid_mapper_err",
+                         os.path.join(self.test_dir, "export.bin"),
+                         preserve=False)
+
+            def _bad_mapper(aid):
+                raise ValueError("test exception")
+            n = import_queue(os.path.join(self.test_dir, "export.bin"),
+                             dest, "q",
+                             mapper=_bad_mapper,
+                             on_conflict=ConflictBehavior.AUTO)
+            self.assertEqual(n, 1)
+        finally:
+            shutil.rmtree(dest)
+        q.close()
+
+    def test_import_mapper_returns_none_falls_back_to_auto(self):
+        q = IndexedQueue.create(self.test_dir, "aid_mapper_none")
+        a = q.create_appender()
+        a.append(b"hello")
+        a.close()
+
+        dest = tempfile.mkdtemp(suffix="_aid_mapper_none")
+        try:
+            export_queue(self.test_dir, "aid_mapper_none",
+                         os.path.join(self.test_dir, "export.bin"),
+                         preserve=False)
+
+            def _none_mapper(aid):
+                return None
+            n = import_queue(os.path.join(self.test_dir, "export.bin"),
+                             dest, "q",
+                             mapper=_none_mapper,
+                             on_conflict=ConflictBehavior.AUTO)
+            self.assertEqual(n, 1)
+        finally:
+            shutil.rmtree(dest)
+        q.close()
+
+    def test_copy_with_mapper(self):
+        q_src = IndexedQueue.create(self.test_dir, "copy_mapper")
+        a0 = q_src.create_appender()
+        a1 = q_src.create_appender()
+        a0.append(b"from-a0")
+        a1.append(b"from-a1")
+        a0.close(); a1.close()
+
+        dest = tempfile.mkdtemp(suffix="_copy_mapper")
+        try:
+            n = copy_queue(self.test_dir, "copy_mapper", dest, "q",
+                           mapper=lambda aid: 0,
+                           on_conflict=ConflictBehavior.AUTO)
+            self.assertEqual(n, 2)
+            r = IndexedReader.create(dest, "q")
+            for i in range(r.last_index() + 1):
+                msg = r.read(i)
+                self.assertIsNotNone(msg)
+                self.assertEqual(r.appender_id(), 0)
+            r.close()
+        finally:
+            shutil.rmtree(dest)
+        q_src.close()
+
+    def test_read_view_then_appender_id(self):
+        q = IndexedQueue.create(self.test_dir, "view_aid")
+        a = q.create_appender()
+        a.append(b"hello")
+        a.close()
+
+        r = IndexedReader.create(self.test_dir, "view_aid")
+        try:
+            view = r.read_view(0)
+            self.assertIsNotNone(view)
+            aid = r.appender_id()
+            self.assertIsInstance(aid, int)
+        finally:
+            r.close()
+        q.close()
 
 class TestProducerCompletion(unittest.TestCase):
     """Tests for uncommitted append, commit, and create_appender_with_id."""
