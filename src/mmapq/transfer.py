@@ -105,7 +105,7 @@ def import_queue(src_path: str, directory: str,
     Args:
         mapper: Maps source appender ID to destination ID.
                 Return -1 (APPENDER_ID_AUTO) for auto-assign.
-                None means identity mapping.
+                Pass None (the parameter value) for identity mapping.
                 **Note: if this function raises, the transfer
                 continues with auto-assigned IDs.**
         on_conflict: ``ConflictBehavior.AUTO`` (default) or

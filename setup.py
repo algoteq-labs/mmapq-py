@@ -331,6 +331,7 @@ ffi.set_source(
     #include "indexed_queue.h"
     #include "indexed_archiver.h"
     #include "queue_transfer.h"
+    #include "batch_queue_transfer.h"
     """,
     sources=_rel_sources,
     include_dirs=[str(_rel_inc)],

@@ -72,4 +72,5 @@ __all__ = [
     "SchemaMismatchError",
     "QueueExistsError",
     "AppenderIdConflictError",
+    "check_rc",
 ]
