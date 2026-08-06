@@ -64,10 +64,13 @@ def export_queue(directory: str, queue_name: str, dest_path: str, *,
 
 def import_queue(src_path: str, directory: str,
                  queue_name: str, *,
-                 start_index: int = 0,
                  allow_append: bool = False,
                  preserve: bool = False) -> int:
     """Import entries from a flat stream file into a queue.
+
+    Start index is determined automatically:
+      REBASE  → 0
+      PRESERVE → the stream header's start_index
 
     Raises:
         OSError: cannot open source file for reading.
@@ -81,7 +84,7 @@ def import_queue(src_path: str, directory: str,
     try:
         n = lib.queue_transfer_import(
             src, directory.encode(), queue_name.encode(),
-            start_index, _mode(preserve), ffi.NULL, ffi.NULL,
+            _mode(preserve), ffi.NULL, ffi.NULL,
             int(allow_append),
         )
         return check_rc(n, "import_queue")
@@ -91,7 +94,6 @@ def import_queue(src_path: str, directory: str,
 
 def import_batch_stream(src_path: str, directory: str,
                          queue_name: str, *,
-                         start_index: int = 0,
                          allow_append: bool = False,
                          preserve: bool = False) -> int:
     """Import a batch-format stream into a normal queue (flatten).
@@ -110,7 +112,7 @@ def import_batch_stream(src_path: str, directory: str,
     try:
         n = lib.queue_transfer_import_batch_stream(
             src, directory.encode(), queue_name.encode(),
-            start_index, _mode(preserve), ffi.NULL, ffi.NULL,
+            _mode(preserve), ffi.NULL, ffi.NULL,
             int(allow_append),
         )
         return check_rc(n, "import_batch_stream")
@@ -119,10 +121,9 @@ def import_batch_stream(src_path: str, directory: str,
 
 
 def import_flat_to_batch(src_path: str, directory: str,
-                          queue_name: str, *,
-                          start_index: int = 0,
-                          allow_append: bool = False,
-                          preserve: bool = False) -> int:
+                           queue_name: str, *,
+                           allow_append: bool = False,
+                           preserve: bool = False) -> int:
     """Import a flat stream into a batch queue (1-msg batches).
 
     Each entry becomes its own 1-element batch.
@@ -139,7 +140,7 @@ def import_flat_to_batch(src_path: str, directory: str,
     try:
         n = lib.batch_queue_transfer_import_flat_stream(
             src, directory.encode(), queue_name.encode(),
-            start_index, _mode(preserve), ffi.NULL, ffi.NULL,
+            _mode(preserve), ffi.NULL, ffi.NULL,
             int(allow_append),
         )
         return check_rc(n, "import_flat_to_batch")

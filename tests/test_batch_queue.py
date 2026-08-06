@@ -683,7 +683,7 @@ class TestTransfer(unittest.TestCase):
         export_path = os.path.join(self.test_dir, "ip_export.bin")
         export_queue(src_dir, "q", export_path)
         n = import_queue(export_path, dst_dir, "q_imported",
-                         start_index=0, preserve=True)
+                         preserve=True)
         self.assertEqual(n, 1)
         # Verify index space
         r = IndexedReader.create(dst_dir, "q_imported")
@@ -903,7 +903,7 @@ class TestTransfer(unittest.TestCase):
         lib.fclose(f)
         br.close()
 
-        n = import_batch_stream(export_path, dst_dir, "q", start_index=100, preserve=True)
+        n = import_batch_stream(export_path, dst_dir, "q", preserve=True)
         self.assertEqual(n, 1)
         r = IndexedReader.create(dst_dir, "q")
         self.assertEqual(r.start_index(), 100)
@@ -927,7 +927,7 @@ class TestTransfer(unittest.TestCase):
         export_path = os.path.join(self.test_dir, "ifb_export.bin")
         export_queue(src_dir, "q", export_path, preserve=True)
 
-        n = import_flat_to_batch(export_path, dst_dir, "bq", start_index=100, preserve=True)
+        n = import_flat_to_batch(export_path, dst_dir, "bq", preserve=True)
         self.assertEqual(n, 1)
         r = IndexedBatchReader.create(dst_dir, "bq")
         self.assertEqual(r.start_index(), 100)

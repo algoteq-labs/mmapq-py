@@ -221,10 +221,10 @@ ffi.cdef("""
         IndexedReader*, void*, int64_t, int64_t, int,
         QueueFilterFn, QueueFilterFn, void*);
     int64_t queue_transfer_import(
-        void*, const char*, const char*, int64_t, int,
+        void*, const char*, const char*, int,
         Runtime*, Runtime*, int);
     int64_t queue_transfer_import_batch_stream(
-        void*, const char*, const char*, int64_t, int,
+        void*, const char*, const char*, int,
         Runtime*, Runtime*, int);
     int64_t queue_transfer_copy(
         IndexedReader*, const char*, const char*,
@@ -242,10 +242,10 @@ ffi.cdef("""
         IndexedBatchReader*, void*, int64_t, int64_t, int,
         BatchQueueFilterFn, BatchQueueFilterFn, void*);
     int64_t batch_queue_transfer_import(
-        void*, const char*, const char*, int64_t, int,
+        void*, const char*, const char*, int,
         Runtime*, Runtime*, int);
     int64_t batch_queue_transfer_import_flat_stream(
-        void*, const char*, const char*, int64_t, int,
+        void*, const char*, const char*, int,
         Runtime*, Runtime*, int);
     int64_t batch_queue_transfer_copy(
         IndexedBatchReader*, const char*, const char*,
