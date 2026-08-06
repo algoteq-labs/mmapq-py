@@ -33,6 +33,7 @@ from mmapq import (
     copy_batch_queue,
     copy_normal_to_batch,
     copy_batch_to_normal,
+    check_rc,
     ffi,
     lib,
 )
@@ -343,11 +344,13 @@ class TestErrors(unittest.TestCase):
         q.close()
 
     def test_exception_types_importable(self):
-        from mmapq import QueueClosedError, QueueCorruptError, SchemaMismatchError, QueueExistsError
+        from mmapq import (QueueClosedError, QueueCorruptError, SchemaMismatchError,
+                           QueueExistsError, AppenderIdConflictError)
         self.assertTrue(issubclass(QueueClosedError, RuntimeError))
         self.assertTrue(issubclass(QueueCorruptError, RuntimeError))
         self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
         self.assertTrue(issubclass(QueueExistsError, RuntimeError))
+        self.assertTrue(issubclass(AppenderIdConflictError, RuntimeError))
 
 
 class TestArchivable(unittest.TestCase):

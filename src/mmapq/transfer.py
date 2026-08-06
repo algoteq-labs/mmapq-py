@@ -42,6 +42,8 @@ def _validate_conflict(on_conflict):
 def _setup_mapper(mapper):
     if mapper is None:
         return ffi.NULL, ffi.NULL
+    if not callable(mapper):
+        raise TypeError(f"mapper must be callable, got {type(mapper).__name__}")
     return _mapper_trampoline, ffi.new_handle(mapper)
 
 
