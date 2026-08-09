@@ -3,6 +3,11 @@
 Each poll() delivers one batch. The handler receives the batch index and
 a list of message payload bytes. The handler iterates over the messages
 directly and returns a NextMove directive.
+
+Note: messages are fully materialized into Python bytes before the handler
+runs. For batches with thousands of large payloads, this doubles memory
+(mapped C memory + Python copies). The old CData-based handler could
+stream messages lazily — if you need that, fall back to raw FFI calls.
 """
 
 from __future__ import annotations

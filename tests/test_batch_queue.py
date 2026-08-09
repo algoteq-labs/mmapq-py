@@ -521,8 +521,9 @@ class TestBatchReader(unittest.TestCase):
         r.close()
 
     def test_batch_appender_id_before_read_raises(self):
+        from mmapq import MmapqError
         r = IndexedBatchReader.create(self.test_dir, "brq")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(MmapqError):
             r.batch_appender_id()
         r.close()
 

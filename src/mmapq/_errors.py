@@ -50,5 +50,5 @@ def check_rc(rc: int, label: str = "operation") -> int:
     """
     if rc >= 0:
         return rc
-    exc, msg = _RC_ERRORS.get(rc, (RuntimeError, f"unexpected return code {rc}"))
+    exc, msg = _RC_ERRORS.get(rc, (MmapqError, f"unexpected return code {rc}"))
     raise exc(f"{label}: {msg} (rc={rc})")
