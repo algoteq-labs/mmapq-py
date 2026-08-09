@@ -76,8 +76,8 @@ class TestBatchQueue(unittest.TestCase):
 
         results = []
 
-        def handler(bi, ctx):
-            results.append((bi, ctx.message_count))
+        def handler(bi, msgs):
+            results.append((bi, len(msgs)))
             return NextMove.ADVANCE
 
         result = p.poll(handler)
@@ -94,7 +94,7 @@ class TestBatchQueue(unittest.TestCase):
         q = IndexedBatchQueue.create(self.test_dir, "test_eos")
         p = q.create_poller()
 
-        result = p.poll(lambda bi, ctx: NextMove.ADVANCE)
+        result = p.poll(lambda bi, _msgs: NextMove.ADVANCE)
         self.assertEqual(result, PollResult.END_OF_STREAM)
 
         p.close()
@@ -109,7 +109,7 @@ class TestBatchQueue(unittest.TestCase):
             w.append(b"msg")
             w.commit()
 
-        result = p.poll(lambda bi, ctx: NextMove.STOP)
+        result = p.poll(lambda bi, _msgs: NextMove.STOP)
         self.assertEqual(result, PollResult.STOPPED)
 
         p.close()
@@ -129,12 +129,12 @@ class TestBatchQueue(unittest.TestCase):
             w.commit()
 
         # Advance past batch 0
-        p.poll(lambda bi, ctx: NextMove.ADVANCE)
+        p.poll(lambda bi, _msgs: NextMove.ADVANCE)
         # Retreat from batch 1
-        result = p.poll(lambda bi, ctx: NextMove.RETREAT)
+        result = p.poll(lambda bi, _msgs: NextMove.RETREAT)
         self.assertEqual(result, PollResult.RETREATED)
         # Now poll batch 0 again via ADVANCE
-        result = p.poll(lambda bi, ctx: NextMove.ADVANCE)
+        result = p.poll(lambda bi, _msgs: NextMove.ADVANCE)
         self.assertEqual(result, PollResult.ADVANCED)
 
         p.close()
@@ -175,13 +175,9 @@ class TestBatchQueue(unittest.TestCase):
 
         messages = []
 
-        def handler(bi, ctx):
-            it_ptr = ffi.addressof(ctx.batch_iterator)
-            while lib.batch_iterator_advance(it_ptr):
-                length = lib.batch_iterator_current_length_ffi(it_ptr)
-                data_ptr = lib.batch_iterator_current_data_ffi(it_ptr)
-                data = ffi.buffer(data_ptr, length)[:]
-                messages.append((bi, bytes(data)))
+        def handler(bi, msgs):
+            for msg in msgs:
+                messages.append((bi, msg))
             return NextMove.ADVANCE
 
         result = p.poll(handler)
@@ -344,14 +340,16 @@ class TestErrors(unittest.TestCase):
         q.close()
 
     def test_exception_types_importable(self):
-        from mmapq import (MmapOutOfMemoryError, QueueClosedError, QueueCorruptError,
-                           SchemaMismatchError, QueueExistsError, AppenderIdConflictError)
-        self.assertTrue(issubclass(MmapOutOfMemoryError, RuntimeError))
-        self.assertTrue(issubclass(QueueClosedError, RuntimeError))
-        self.assertTrue(issubclass(QueueCorruptError, RuntimeError))
-        self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
-        self.assertTrue(issubclass(QueueExistsError, RuntimeError))
-        self.assertTrue(issubclass(AppenderIdConflictError, RuntimeError))
+        from mmapq import (MmapqError, MmapOutOfMemoryError, QueueClosedError,
+                           QueueCorruptError, SchemaMismatchError, QueueExistsError,
+                           AppenderIdConflictError)
+        self.assertTrue(issubclass(MmapqError, RuntimeError))
+        self.assertTrue(issubclass(MmapOutOfMemoryError, MmapqError))
+        self.assertTrue(issubclass(QueueClosedError, MmapqError))
+        self.assertTrue(issubclass(QueueCorruptError, MmapqError))
+        self.assertTrue(issubclass(SchemaMismatchError, MmapqError))
+        self.assertTrue(issubclass(QueueExistsError, MmapqError))
+        self.assertTrue(issubclass(AppenderIdConflictError, MmapqError))
 
 
 class TestArchivable(unittest.TestCase):
@@ -406,8 +404,8 @@ class TestQueueType(unittest.TestCase):
             bq.create_appender()
 
     def test_schema_mismatch_error_importable(self):
-        from mmapq import SchemaMismatchError
-        self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
+        from mmapq import MmapqError, SchemaMismatchError
+        self.assertTrue(issubclass(SchemaMismatchError, MmapqError))
 
 
 class TestReader(unittest.TestCase):
@@ -480,8 +478,9 @@ class TestReader(unittest.TestCase):
         r.close()
 
     def test_appender_id_before_read_raises(self):
+        from mmapq import MmapqError
         r = IndexedReader.create(self.test_dir, "rq")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(MmapqError):
             r.appender_id()
         r.close()
 
@@ -522,8 +521,9 @@ class TestBatchReader(unittest.TestCase):
         r.close()
 
     def test_batch_appender_id_before_read_raises(self):
+        from mmapq import MmapqError
         r = IndexedBatchReader.create(self.test_dir, "brq")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(MmapqError):
             r.batch_appender_id()
         r.close()
 

@@ -131,10 +131,32 @@ from mmapq import (
     IndexedReader,          # Single-message reader
     IndexedBatchReader,     # Batch reader
 
+    # Exceptions
+    MmapqError,             # Base exception
+    QueueClosedError,       # Closed handle
+    QueueCorruptError,      # On-disk corruption
+    SchemaMismatchError,    # Schema/type mismatch
+    QueueExistsError,       # Destination already exists
+    AppenderIdConflictError,# Appender ID conflict
+    MmapOutOfMemoryError,   # Allocation failure
+
+    # Runtime
+    Runtime,                # Async region mapper
+
+    # Archiver
+    IndexedArchiver,        # Start-index management (single-message)
+
     # Transfer (export/import/copy)
     export_queue,           # Export queue to flat stream
+    export_batch_queue,     # Export batch queue to flat stream
     import_queue,           # Import flat stream to queue
+    import_batch_stream,    # Import batch stream to flat queue
+    import_batch_queue,     # Import batch stream to batch queue
+    import_flat_to_batch,   # Import flat stream to batch queue
     copy_queue,             # Copy queue to new directory
+    copy_batch_queue,       # Copy batch queue to new directory
+    copy_normal_to_batch,   # Copy flat queue as batch queue
+    copy_batch_to_normal,   # Copy batch queue as flat queue
 )
 ```
 
@@ -186,6 +208,85 @@ def handler(batch_index, ctx):
 
 - **`create_appender_with_id(appender_id)`** — creates an appender with a specific lane ID
   (0–255). Raises `ValueError` if the ID is out of range.
+
+### Sync vs async mapping
+
+By default mapping happens synchronously on the hot path. For async background
+region mapping, pass a `Runtime`:
+
+```python
+from mmapq import Runtime, IndexedQueue
+
+rt = Runtime.region_mapper()
+q = IndexedQueue.create("/dev/shm", "rt_queue", runtime=rt)
+
+# Runtime is kept alive by the queue — safe to drop the local reference
+del rt
+```
+
+### Archiving
+
+An archivable queue (`archivable=True`) can advance its start index so old
+entries become inaccessible and their backing files can be safely deleted:
+
+```python
+from mmapq import IndexedArchiver, IndexedQueue
+
+q = IndexedQueue.create("/dev/shm", "arch_q", archivable=True)
+# ... produce messages ...
+
+arch = IndexedArchiver.create("/dev/shm", "arch_q")
+arch.archive_up_to_index(1000)          # archive entries < 1000
+files = arch.archivable_files()         # paths safe to delete
+for path in files:
+    # delete, compress, or move them
+    pass
+```
+
+### Transfer (export/import/copy)
+
+The library provides 10 transfer functions across single-message and batch
+queues:
+
+```python
+from mmapq import (
+    export_queue, export_batch_queue,
+    import_queue, import_batch_stream, import_batch_queue,
+    import_flat_to_batch,
+    copy_queue, copy_batch_queue,
+    copy_normal_to_batch, copy_batch_to_normal,
+)
+
+# Export a queue to a portable flat file (single-message)
+n = export_queue("/dev/shm", "src", "/tmp/export.bin")
+
+# Import flat file into a new queue (allow_append=True appends to existing)
+n = import_queue("/tmp/export.bin", "/dev/shm", "restored")
+n = import_queue("/tmp/export.bin", "/dev/shm", "restored", allow_append=True)
+
+# Copy queue files directly (avoids intermediate export file)
+n = copy_queue("/dev/shm", "src", "/dev/shm", "copy")
+
+# Preserve index space (start_index, appender IDs)
+n = export_queue("/dev/shm", "src", "/tmp/preserve.bin", preserve=True)
+n = import_queue("/tmp/preserve.bin", "/dev/shm", "preserved", preserve=True)
+
+# Batch queue transfers
+n = export_batch_queue("/dev/shm", "batch_src", "/tmp/batch_export.bin")
+n = import_batch_queue("/tmp/batch_export.bin", "/dev/shm", "batch_dst")
+n = import_batch_stream("/tmp/batch_export.bin", "/dev/shm", "flat_stream")
+
+# Cross-type conversions (flat to batch, batch to flat)
+n = import_flat_to_batch("/tmp/export.bin", "/dev/shm", "batch_queue")
+n = copy_normal_to_batch("/dev/shm", "flat_src", "/dev/shm", "batch_dst")
+n = copy_batch_to_normal("/dev/shm", "batch_src", "/dev/shm", "flat_dst")
+
+# All copy/import functions accept:
+#   allow_append=True    — append to existing queue instead of refusing
+#   preserve=True        — keep original index space from source
+#   mapper=callable      — map source appender IDs to destination IDs
+#   on_conflict=<enum>   — ConflictBehavior.AUTO or .ABORT
+```
 
 ## Examples
 

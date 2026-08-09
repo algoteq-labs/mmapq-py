@@ -7,7 +7,7 @@ import weakref
 from typing import Optional
 
 from . import _cffi as _cffi_mod
-from ._errors import QueueClosedError, QueueCorruptError, check_rc
+from ._errors import MmapqError, QueueClosedError, QueueCorruptError, check_rc
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -158,7 +158,7 @@ class IndexedReader:
         if status == EntryStatus.AVAILABLE:
             return
         if status == EntryStatus.ERROR:
-            raise RuntimeError(
+            raise MmapqError(
                 "indexed_reader_read: ENTRY_ERROR (mapping timeout or I/O failure)")
         raise QueueCorruptError(
             f"indexed_reader_read: unknown status {status}")
@@ -175,7 +175,7 @@ class IndexedReader:
         """
         self._check_open()
         if not self._last_read_valid:
-            raise RuntimeError(
+            raise MmapqError(
                 "no valid read performed — call read() first and check result")
         return self._ctx.appender_id
 
@@ -278,7 +278,7 @@ class IndexedBatchReader:
         """
         self._check_open()
         if not self._last_read_valid:
-            raise RuntimeError(
+            raise MmapqError(
                 "no valid batch read performed — call read() first and check result")
         return self._ctx.appender_id
 
@@ -306,23 +306,18 @@ class IndexedBatchReader:
 
     def _extract_batch(self) -> Optional[list[bytes]]:
         from .types import BatchEntryStatus
+        from .batch_poller import iter_batch_messages
         status = self._ctx.status
         if status == BatchEntryStatus.AVAILABLE:
             self._last_read_valid = True
-            messages = []
-            it_ptr = ffi.addressof(self._ctx.batch_iterator)
-            while lib.batch_iterator_advance(it_ptr):
-                length = lib.batch_iterator_current_length_ffi(it_ptr)
-                data_ptr = lib.batch_iterator_current_data_ffi(it_ptr)
-                messages.append(bytes(ffi.buffer(data_ptr, length)))
-            return messages
+            return iter_batch_messages(self._ctx)
         else:
             self._last_read_valid = False
         if status in (BatchEntryStatus.END_OF_STREAM,
                       BatchEntryStatus.ARCHIVED):
             return None
         if status == BatchEntryStatus.ERROR:
-            raise RuntimeError(
+            raise MmapqError(
                 "indexed_batch_reader_read: ENTRY_ERROR "
                 "(mapping timeout or I/O failure)")
         else:
