@@ -22,7 +22,12 @@ class AppenderIdConflictError(RuntimeError):
     """The mapped appender ID is already in use by the destination queue."""
 
 
+class MmapOutOfMemoryError(RuntimeError):
+    """Internal allocation failure (calloc, strdup, etc.). Back off, do not retry hot-loop."""
+
+
 _RC_ERRORS = {
+    -9: (MmapOutOfMemoryError, "internal allocation failure"),
     -8: (AppenderIdConflictError, "appender ID already in use"),
     -7: (FileNotFoundError, "file or queue does not exist"),
     -6: (QueueExistsError, "destination queue already exists"),

@@ -5,6 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
+from ._errors import check_rc
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -41,31 +42,31 @@ class IndexedBatchQueue:
         if runtime is not None:
             wr = runtime._inner
             rr = runtime._inner
-        ptr = lib.indexed_batch_queue_create_default(
+        ptr = ffi.new("IndexedBatchQueue **")
+        rc = lib.indexed_batch_queue_create_default(
             directory.encode(), queue_name.encode(),
-            wr, rr,
+            wr, rr, ptr,
         )
-        if not ptr:
-            raise RuntimeError("indexed_batch_queue_create_default returned NULL")
-        return cls(ptr, runtime=runtime)
+        check_rc(rc, "indexed_batch_queue_create_default")
+        return cls(ptr[0], runtime=runtime)
 
     def create_poller(self):
         """Create a sequential batch poller."""
         from .batch_poller import IndexedBatchPoller
-        ptr = lib.indexed_batch_queue_create_poller(self._inner)
-        if not ptr:
-            raise RuntimeError("create_poller returned NULL")
-        p = IndexedBatchPoller(ptr)
+        ptr = ffi.new("IndexedBatchPoller **")
+        rc = lib.indexed_batch_queue_create_poller(self._inner, ptr)
+        check_rc(rc, "create_poller")
+        p = IndexedBatchPoller(ptr[0])
         p._runtime = self._runtime
         return p
 
     def create_appender(self):
         """Create a batch appender."""
         from .batch_appender import IndexedBatchAppender
-        ptr = lib.indexed_batch_queue_create_appender(self._inner)
-        if not ptr:
-            raise RuntimeError("create_appender returned NULL")
-        a = IndexedBatchAppender(ptr)
+        ptr = ffi.new("IndexedBatchAppender **")
+        rc = lib.indexed_batch_queue_create_appender(self._inner, ptr)
+        check_rc(rc, "create_appender")
+        a = IndexedBatchAppender(ptr[0])
         a._runtime = self._runtime
         return a
 

@@ -44,22 +44,22 @@ class IndexedQueue:
             wr = runtime._inner
             rr = runtime._inner
         arch_int = 1 if archivable else 0
-        ptr = lib.indexed_queue_create(
+        ptr = ffi.new("IndexedQueue **")
+        rc = lib.indexed_queue_create(
             directory.encode(), queue_name.encode(),
             4096 * 1024, 4, 1, (4096 * 1024) * 256,
-            0, 10000000000, arch_int, wr, rr,
+            0, 10000000000, arch_int, wr, rr, ptr,
         )
-        if not ptr:
-            raise RuntimeError("indexed_queue_create returned NULL")
-        return cls(ptr, runtime=runtime)
+        check_rc(rc, "indexed_queue_create")
+        return cls(ptr[0], runtime=runtime)
 
     def create_appender(self):
         """Create a single-message appender."""
         from .single_appender import IndexedAppender
-        ptr = lib.indexed_queue_create_appender(self._inner)
-        if not ptr:
-            raise RuntimeError("create_appender returned NULL")
-        a = IndexedAppender(ptr)
+        ptr = ffi.new("IndexedAppender **")
+        rc = lib.indexed_queue_create_appender(self._inner, ptr)
+        check_rc(rc, "create_appender")
+        a = IndexedAppender(ptr[0])
         a._runtime = self._runtime
         return a
 
@@ -73,21 +73,21 @@ class IndexedQueue:
             raise ValueError(
                 f"appender_id must be in [0, 255], got {appender_id}")
         from .single_appender import IndexedAppender
-        ptr = lib.indexed_queue_create_appender_with_id(
-            self._inner, appender_id)
-        if not ptr:
-            raise RuntimeError("create_appender_with_id returned NULL")
-        a = IndexedAppender(ptr)
+        ptr = ffi.new("IndexedAppender **")
+        rc = lib.indexed_queue_create_appender_with_id(
+            self._inner, appender_id, ptr)
+        check_rc(rc, "create_appender_with_id")
+        a = IndexedAppender(ptr[0])
         a._runtime = self._runtime
         return a
 
     def create_poller(self):
         """Create a single-message poller."""
         from .single_poller import IndexedPoller
-        ptr = lib.indexed_queue_create_poller(self._inner)
-        if not ptr:
-            raise RuntimeError("create_poller returned NULL")
-        p = IndexedPoller(ptr)
+        ptr = ffi.new("IndexedPoller **")
+        rc = lib.indexed_queue_create_poller(self._inner, ptr)
+        check_rc(rc, "create_poller")
+        p = IndexedPoller(ptr[0])
         p._runtime = self._runtime
         return p
 

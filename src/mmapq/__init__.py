@@ -8,6 +8,7 @@ lib = _cffi_mod.lib
 
 from ._errors import (
     AppenderIdConflictError,
+    MmapOutOfMemoryError,
     QueueClosedError,
     QueueCorruptError,
     SchemaMismatchError,
@@ -72,5 +73,6 @@ __all__ = [
     "SchemaMismatchError",
     "QueueExistsError",
     "AppenderIdConflictError",
+    "MmapOutOfMemoryError",
     "check_rc",
 ]

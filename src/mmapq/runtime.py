@@ -5,6 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
+from ._errors import check_rc
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -28,10 +29,10 @@ class Runtime:
         The queue and its participants hold a reference to the runtime;
         it will not be finalized while they are alive.
         """
-        ptr = lib.runtime_region_mapper()
-        if not ptr:
-            raise RuntimeError("runtime_region_mapper returned NULL")
-        return cls(ptr)
+        ptr = ffi.new("Runtime **")
+        rc = lib.runtime_region_mapper(ptr)
+        check_rc(rc, "runtime_region_mapper")
+        return cls(ptr[0])
 
     def close(self) -> None:
         """Close the runtime, stopping background mapping. Idempotent."""
