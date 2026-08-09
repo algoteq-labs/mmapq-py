@@ -9,7 +9,7 @@ import os
 import sys
 import struct
 
-from mmapq import IndexedBatchQueue, NextMove, ffi, lib
+from mmapq import IndexedBatchQueue, NextMove
 
 SHUTDOWN_SEQ = 0
 LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence
@@ -53,27 +53,22 @@ def main():
 
     shutdown = False
 
-    def echo_handler(batch_index, ctx):
+    def echo_handler(batch_index, messages):
         nonlocal shutdown
 
-        # Advance to first message, check for shutdown
-        it = ffi.addressof(ctx.batch_iterator)
-        if not lib.batch_iterator_advance(it):
+        if not messages:
             return NextMove.ADVANCE
 
-        length = lib.batch_iterator_current_length_ffi(it)
-        data_ptr = lib.batch_iterator_current_data_ffi(it)
-        data = bytes(ffi.buffer(data_ptr, length))
-
-        if len(data) >= 6:
-            (_, seq) = struct.unpack(LATENCY_HEADER_FMT, data[:6])
+        msg0 = messages[0]
+        if len(msg0) >= 6:
+            (_, seq) = struct.unpack(LATENCY_HEADER_FMT, msg0[:6])
             if seq == SHUTDOWN_SEQ:
                 shutdown = True
 
-        # Echo: manually append msg 0, then append_remaining_from for msg 1..N
+        # Echo: all messages go to a new batch
         with appender.start_batch() as writer:
-            writer.append(data)
-            writer.append_remaining_from(it)
+            for msg in messages:
+                writer.append(msg)
             writer.commit()
 
         return NextMove.ADVANCE

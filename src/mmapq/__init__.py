@@ -7,6 +7,7 @@ ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 
 from ._errors import (
+    MmapqError,
     AppenderIdConflictError,
     MmapOutOfMemoryError,
     QueueClosedError,
@@ -68,6 +69,7 @@ __all__ = [
     "copy_batch_to_normal",
     "Runtime",
     "IndexedArchiver",
+    "MmapqError",
     "QueueClosedError",
     "QueueCorruptError",
     "SchemaMismatchError",

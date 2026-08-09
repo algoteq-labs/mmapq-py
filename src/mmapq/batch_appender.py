@@ -5,6 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
+from ._errors import MmapqError
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -39,7 +40,7 @@ class BatchWriter:
         buf = ffi.from_buffer(data)
         result = lib.mutable_batch_append(self._inner, buf, len(data))
         if result < 0:
-            raise RuntimeError("mutable_batch_append failed")
+            raise MmapqError("mutable_batch_append failed")
         return result
 
     def append_remaining_from(self, it) -> int:
@@ -58,10 +59,10 @@ class BatchWriter:
         """
         offset = lib.mutable_batch_complete(self._inner)
         if offset < 0:
-            raise RuntimeError("mutable_batch_complete failed")
+            raise MmapqError("mutable_batch_complete failed")
         idx = lib.indexed_batch_appender_commit_batch(self._appender._inner, offset)
         if idx < 0:
-            raise RuntimeError("commit_batch failed")
+            raise MmapqError("commit_batch failed")
         self._committed = True
         return idx
 
@@ -92,7 +93,7 @@ class IndexedBatchAppender:
         """Start a new batch write session."""
         ptr = lib.indexed_batch_appender_start_batch(self._inner)
         if not ptr:
-            raise RuntimeError("start_batch returned NULL")
+            raise MmapqError("start_batch returned NULL")
         return BatchWriter(self, ptr)
 
     def close(self):

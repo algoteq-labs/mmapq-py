@@ -2,28 +2,32 @@
 
 from __future__ import annotations
 
+class MmapqError(RuntimeError):
+    """Base exception for all mmapq errors."""
 
-class QueueClosedError(RuntimeError):
+
+class QueueClosedError(MmapqError):
     """The queue or participant has been closed."""
 
 
-class QueueCorruptError(RuntimeError):
+class QueueCorruptError(MmapqError):
     """On-disk corruption detected (e.g., committed zero-length message)."""
 
 
-class SchemaMismatchError(RuntimeError):
+class SchemaMismatchError(MmapqError):
     """Schema version or queue type mismatch on open."""
 
 
-class QueueExistsError(RuntimeError):
+class QueueExistsError(MmapqError):
     """The destination queue already exists and allow_append was not set."""
 
-class AppenderIdConflictError(RuntimeError):
+class AppenderIdConflictError(MmapqError):
     """The mapped appender ID is already in use by the destination queue."""
 
 
-class MmapOutOfMemoryError(RuntimeError):
+class MmapOutOfMemoryError(MmapqError):
     """Internal allocation failure (calloc, strdup, etc.). Back off, do not retry hot-loop."""
+
 
 
 _RC_ERRORS = {
@@ -35,7 +39,7 @@ _RC_ERRORS = {
     -4: (QueueCorruptError, "on-disk corruption detected"),
     -3: (QueueClosedError, "queue/appender is closed"),
     -2: (ValueError, "invalid argument"),
-    -1: (RuntimeError, "mapping timed out or I/O error"),
+    -1: (MmapqError, "mapping timed out or I/O error"),
 }
 
 
