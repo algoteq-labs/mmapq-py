@@ -66,13 +66,14 @@ class IndexedReader:
         non-existent queue return None (END_OF_STREAM).
         """
         rt = runtime._inner if runtime is not None else ffi.NULL
-        ptr = lib.indexed_reader_create(
+        ptr = ffi.new("IndexedReader **")
+        rc = lib.indexed_reader_create(
             directory.encode(), queue_name.encode(),
-            ring_size, timeout_ns, rt,
+            ring_size, timeout_ns, rt, ptr,
         )
-        if not ptr:
-            raise RuntimeError("indexed_reader_create returned NULL")
-        return cls(ptr, runtime=runtime)
+        if rc != 0:
+            raise RuntimeError(f"indexed_reader_create failed with code {rc}")
+        return cls(ptr[0], runtime=runtime)
 
     def read(self, index: int) -> Optional[bytes]:
         """Read the entry at the given index.
@@ -224,13 +225,14 @@ class IndexedBatchReader:
         runtime:     optional Runtime for async region mapping (keyword-only)
         """
         rt = runtime._inner if runtime is not None else ffi.NULL
-        ptr = lib.indexed_batch_reader_create(
+        ptr = ffi.new("IndexedBatchReader **")
+        rc = lib.indexed_batch_reader_create(
             directory.encode(), queue_name.encode(),
-            ring_size, timeout_ns, rt,
+            ring_size, timeout_ns, rt, ptr,
         )
-        if not ptr:
-            raise RuntimeError("indexed_batch_reader_create returned NULL")
-        return cls(ptr)
+        if rc != 0:
+            raise RuntimeError(f"indexed_batch_reader_create failed with code {rc}")
+        return cls(ptr[0])
 
     def read(self, index: int) -> Optional[list[bytes]]:
         """Read the batch at the given index.

@@ -70,9 +70,9 @@ ffi.cdef("""
     typedef NextMove (*BatchHandler)(int64_t, BatchReadingContext*, void*);
 
     /* ── Runtime ──────────────────────────────────────────────────────────── */
-    Runtime* runtime_region_mapper(void);
-    int      runtime_set_affinity(Runtime*, int cpu_core);
-    void     runtime_destroy(Runtime*);
+    int  runtime_region_mapper(Runtime**);
+    int  runtime_set_affinity(Runtime*, int cpu_core);
+    void runtime_destroy(Runtime*);
 
     /* ── ReadingContext (single-message result struct) ────────────────────── */
     typedef struct {
@@ -88,15 +88,15 @@ ffi.cdef("""
     typedef NextMove (*MessageHandler)(int64_t, uint8_t, const void*, int32_t, void*);
 
     /* ── Single-message queue factory ──────────────────────────────────────── */
-    IndexedQueue*    indexed_queue_create(
-                         const char*, const char*, int32_t, int, int,
-                         int64_t, int64_t, uint64_t, int,
-                         Runtime*, Runtime*);
-    IndexedQueue*    indexed_queue_create_default(
-                         const char*, const char*, Runtime*, Runtime*);
-    IndexedAppender* indexed_queue_create_appender(IndexedQueue*);
-    IndexedAppender* indexed_queue_create_appender_with_id(IndexedQueue*, uint8_t);
-    IndexedPoller*   indexed_queue_create_poller(IndexedQueue*);
+    int    indexed_queue_create(
+               const char*, const char*, int32_t, int, int,
+               int64_t, int64_t, uint64_t, int,
+               Runtime*, Runtime*, IndexedQueue**);
+    int    indexed_queue_create_default(
+               const char*, const char*, Runtime*, Runtime*, IndexedQueue**);
+    int    indexed_queue_create_appender(IndexedQueue*, IndexedAppender**);
+    int    indexed_queue_create_appender_with_id(IndexedQueue*, uint8_t, IndexedAppender**);
+    int    indexed_queue_create_poller(IndexedQueue*, IndexedPoller**);
     void             indexed_queue_close(IndexedQueue*);
     int64_t  indexed_appender_append(IndexedAppender*, const void*, int32_t);
     int64_t  indexed_appender_append_uncommitted(
@@ -107,7 +107,7 @@ ffi.cdef("""
     void     indexed_appender_close(IndexedAppender*);
 
     /* ── Single-message poller ─────────────────────────────────────────────── */
-    IndexedPoller* indexed_poller_create(const char*, const char*, int, uint64_t, Runtime*);
+    int indexed_poller_create(const char*, const char*, int, uint64_t, Runtime*, IndexedPoller**);
     PollResult     indexed_poller_poll(IndexedPoller*, MessageHandler, void*);
     int            indexed_poller_move_to_index(IndexedPoller*, int64_t);
     int            indexed_poller_move_to_end(IndexedPoller*);
@@ -119,19 +119,21 @@ ffi.cdef("""
     void           indexed_poller_close(IndexedPoller*);
 
     /* ── Batch queue factory ───────────────────────────────────────────────── */
-    IndexedBatchQueue*    indexed_batch_queue_create(
-                              const char*, const char*, int32_t, int, int,
-                              int64_t, int64_t, uint64_t, int,
-                              Runtime*, Runtime*);
-    IndexedBatchQueue*    indexed_batch_queue_create_default(
-                              const char*, const char*, Runtime*, Runtime*);
-    IndexedBatchPoller*   indexed_batch_queue_create_poller(IndexedBatchQueue*);
-    IndexedBatchAppender* indexed_batch_queue_create_appender(IndexedBatchQueue*);
-    void                  indexed_batch_queue_close(IndexedBatchQueue*);
+    int indexed_batch_queue_create(
+        const char*, const char*, int32_t, int, int,
+        int64_t, int64_t, uint64_t, int,
+        Runtime*, Runtime*, IndexedBatchQueue**);
+    int indexed_batch_queue_create_default(
+        const char*, const char*, Runtime*, Runtime*, IndexedBatchQueue**);
+    int indexed_batch_queue_create_poller(
+        IndexedBatchQueue*, IndexedBatchPoller**);
+    int indexed_batch_queue_create_appender(
+        IndexedBatchQueue*, IndexedBatchAppender**);
+    void indexed_batch_queue_close(IndexedBatchQueue*);
 
     /* ── Batch poller ─────────────────────────────────────────────────────── */
-    IndexedBatchPoller* indexed_batch_poller_create(
-        const char*, const char*, int, uint64_t, Runtime*);
+    int indexed_batch_poller_create(
+        const char*, const char*, int, uint64_t, Runtime*, IndexedBatchPoller**);
     PollResult          indexed_batch_poller_poll(
         IndexedBatchPoller*, BatchHandler, void*);
     int                 indexed_batch_poller_move_to_index(
@@ -182,8 +184,9 @@ ffi.cdef("""
     /* ── IndexedReader (indexed_reader.h:68) ──────────────────────────────────── */
     typedef struct IndexedReader IndexedReader;
 
-    IndexedReader *indexed_reader_create(
-        const char*, const char*, int, uint64_t, Runtime*);
+    int indexed_reader_create(
+        const char*, const char*, int, uint64_t, Runtime*, IndexedReader**);
+    int indexed_queue_create_reader(IndexedQueue*, IndexedReader**);
     ReadingContext *indexed_reader_read(
         IndexedReader*, int64_t, ReadingContext*);
     ReadingContext *indexed_reader_read_first(
@@ -198,8 +201,8 @@ ffi.cdef("""
     /* ── IndexedBatchReader (indexed_batch_reader.h:35) ───────────────────────── */
     typedef struct IndexedBatchReader IndexedBatchReader;
 
-    IndexedBatchReader *indexed_batch_reader_create(
-        const char*, const char*, int, uint64_t, Runtime*);
+    int indexed_batch_reader_create(
+        const char*, const char*, int, uint64_t, Runtime*, IndexedBatchReader**);
     BatchReadingContext *indexed_batch_reader_read(
         IndexedBatchReader*, int64_t, BatchReadingContext*);
     BatchReadingContext *indexed_batch_reader_read_first(
@@ -274,7 +277,8 @@ ffi.cdef("""
     /* ── Archiver (indexed_archiver.h:30,48,62,90,97,122,136,145) ────────────── */
     typedef struct IndexedArchiver IndexedArchiver;
 
-    IndexedArchiver *indexed_archiver_create(const char*, const char*, int, Runtime*);
+    int indexed_archiver_create(const char*, const char*, int, Runtime*, IndexedArchiver**);
+    int indexed_queue_create_archiver(IndexedQueue*, IndexedArchiver**);
     int              indexed_archiver_archivable(IndexedArchiver*);
     int              indexed_archiver_archive_up_to_index(IndexedArchiver*, int64_t);
     int              indexed_archiver_archivable_files(

@@ -881,10 +881,16 @@ class TestTransfer(unittest.TestCase):
         os.makedirs(dst_dir)
 
         # Create batch queue with start_index=100 via C API
-        bq = lib.indexed_batch_queue_create(
+        bq_ptr = ffi.new("IndexedBatchQueue **")
+        rc = lib.indexed_batch_queue_create(
             src_dir.encode(), b"bq", 4096, 4, 1, 262144, 100, 10000000000, 0,
-            ffi.NULL, ffi.NULL)
-        ba = lib.indexed_batch_queue_create_appender(bq)
+            ffi.NULL, ffi.NULL, bq_ptr)
+        self.assertEqual(rc, 0)
+        bq = bq_ptr[0]
+        ba_ptr = ffi.new("IndexedBatchAppender **")
+        rc = lib.indexed_batch_queue_create_appender(bq, ba_ptr)
+        self.assertEqual(rc, 0)
+        ba = ba_ptr[0]
         mb = lib.indexed_batch_appender_start_batch(ba)
         lib.mutable_batch_append(mb, b"hello", 5)
         off = lib.mutable_batch_complete(mb)
@@ -906,10 +912,16 @@ class TestTransfer(unittest.TestCase):
         os.makedirs(dst_dir)
 
         # Create normal queue with start_index=100 via C API
-        q = lib.indexed_queue_create(
+        q_ptr = ffi.new("IndexedQueue **")
+        rc = lib.indexed_queue_create(
             src_dir.encode(), b"q", 4096, 4, 1, 262144, 100, 10000000000, 0,
-            ffi.NULL, ffi.NULL)
-        a = lib.indexed_queue_create_appender(q)
+            ffi.NULL, ffi.NULL, q_ptr)
+        self.assertEqual(rc, 0)
+        q = q_ptr[0]
+        aptr = ffi.new("IndexedAppender **")
+        rc = lib.indexed_queue_create_appender(q, aptr)
+        self.assertEqual(rc, 0)
+        a = aptr[0]
         lib.indexed_appender_append(a, b"world", 5)
         lib.indexed_appender_close(a)
         lib.indexed_queue_close(q)
@@ -926,10 +938,16 @@ class TestTransfer(unittest.TestCase):
         os.makedirs(src_dir)
         os.makedirs(dst_dir)
 
-        bq = lib.indexed_batch_queue_create(
+        bq_ptr = ffi.new("IndexedBatchQueue **")
+        rc = lib.indexed_batch_queue_create(
             src_dir.encode(), b"bq", 4096, 4, 1, 262144, 100, 10000000000, 0,
-            ffi.NULL, ffi.NULL)
-        ba = lib.indexed_batch_queue_create_appender(bq)
+            ffi.NULL, ffi.NULL, bq_ptr)
+        self.assertEqual(rc, 0)
+        bq = bq_ptr[0]
+        ba_ptr = ffi.new("IndexedBatchAppender **")
+        rc = lib.indexed_batch_queue_create_appender(bq, ba_ptr)
+        self.assertEqual(rc, 0)
+        ba = ba_ptr[0]
         mb = lib.indexed_batch_appender_start_batch(ba)
         lib.mutable_batch_append(mb, b"test", 4)
         off = lib.mutable_batch_complete(mb)
@@ -957,10 +975,16 @@ class TestTransfer(unittest.TestCase):
         os.makedirs(src_dir)
         os.makedirs(dst_dir)
 
-        q = lib.indexed_queue_create(
+        q_ptr = ffi.new("IndexedQueue **")
+        rc = lib.indexed_queue_create(
             src_dir.encode(), b"q", 4096, 4, 1, 262144, 100, 10000000000, 0,
-            ffi.NULL, ffi.NULL)
-        a = lib.indexed_queue_create_appender(q)
+            ffi.NULL, ffi.NULL, q_ptr)
+        self.assertEqual(rc, 0)
+        q = q_ptr[0]
+        aptr = ffi.new("IndexedAppender **")
+        rc = lib.indexed_queue_create_appender(q, aptr)
+        self.assertEqual(rc, 0)
+        a = aptr[0]
         lib.indexed_appender_append(a, b"test", 4)
         lib.indexed_appender_close(a)
         lib.indexed_queue_close(q)

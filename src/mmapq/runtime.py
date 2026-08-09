@@ -28,10 +28,11 @@ class Runtime:
         The queue and its participants hold a reference to the runtime;
         it will not be finalized while they are alive.
         """
-        ptr = lib.runtime_region_mapper()
-        if not ptr:
-            raise RuntimeError("runtime_region_mapper returned NULL")
-        return cls(ptr)
+        ptr = ffi.new("Runtime **")
+        rc = lib.runtime_region_mapper(ptr)
+        if rc != 0:
+            raise RuntimeError(f"runtime_region_mapper failed with code {rc}")
+        return cls(ptr[0])
 
     def close(self) -> None:
         """Close the runtime, stopping background mapping. Idempotent."""

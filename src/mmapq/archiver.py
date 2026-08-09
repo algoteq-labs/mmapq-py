@@ -42,13 +42,14 @@ class IndexedArchiver:
         The queue must have been created before archiving is possible.
         """
         rt = runtime._inner if runtime is not None else ffi.NULL
-        ptr = lib.indexed_archiver_create(
+        ptr = ffi.new("IndexedArchiver **")
+        rc = lib.indexed_archiver_create(
             directory.encode(), queue_name.encode(),
-            ring_size, rt,
+            ring_size, rt, ptr,
         )
-        if not ptr:
-            raise RuntimeError("indexed_archiver_create returned NULL")
-        return cls(ptr)
+        if rc != 0:
+            raise RuntimeError(f"indexed_archiver_create failed with code {rc}")
+        return cls(ptr[0])
 
     def archivable(self) -> bool:
         """Return True if the queue was created with archivable=True."""
