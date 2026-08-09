@@ -404,8 +404,8 @@ class TestQueueType(unittest.TestCase):
             bq.create_appender()
 
     def test_schema_mismatch_error_importable(self):
-        from mmapq import SchemaMismatchError
-        self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))
+        from mmapq import MmapqError, SchemaMismatchError
+        self.assertTrue(issubclass(SchemaMismatchError, MmapqError))
 
 
 class TestReader(unittest.TestCase):

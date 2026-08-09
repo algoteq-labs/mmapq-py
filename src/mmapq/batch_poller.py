@@ -22,7 +22,7 @@ from .types import NextMove, PollResult
 from ._errors import QueueCorruptError
 
 
-def iter_batch_messages(ctx):
+def iter_batch_messages(ctx: "CData") -> list[bytes]:
     """Iterate over messages in a BatchReadingContext.
 
     Returns a list of payload bytes for each message in the batch.
