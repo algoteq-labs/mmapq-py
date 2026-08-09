@@ -478,8 +478,9 @@ class TestReader(unittest.TestCase):
         r.close()
 
     def test_appender_id_before_read_raises(self):
+        from mmapq import MmapqError
         r = IndexedReader.create(self.test_dir, "rq")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(MmapqError):
             r.appender_id()
         r.close()
 
