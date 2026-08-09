@@ -47,8 +47,7 @@ class IndexedArchiver:
             directory.encode(), queue_name.encode(),
             ring_size, rt, ptr,
         )
-        if rc != 0:
-            raise RuntimeError(f"indexed_archiver_create failed with code {rc}")
+        check_rc(rc, "indexed_archiver_create")
         return cls(ptr[0])
 
     def archivable(self) -> bool:

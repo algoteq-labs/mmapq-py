@@ -5,6 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
+from ._errors import check_rc
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -30,8 +31,7 @@ class Runtime:
         """
         ptr = ffi.new("Runtime **")
         rc = lib.runtime_region_mapper(ptr)
-        if rc != 0:
-            raise RuntimeError(f"runtime_region_mapper failed with code {rc}")
+        check_rc(rc, "runtime_region_mapper")
         return cls(ptr[0])
 
     def close(self) -> None:

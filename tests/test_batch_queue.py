@@ -344,8 +344,9 @@ class TestErrors(unittest.TestCase):
         q.close()
 
     def test_exception_types_importable(self):
-        from mmapq import (QueueClosedError, QueueCorruptError, SchemaMismatchError,
-                           QueueExistsError, AppenderIdConflictError)
+        from mmapq import (MmapOutOfMemoryError, QueueClosedError, QueueCorruptError,
+                           SchemaMismatchError, QueueExistsError, AppenderIdConflictError)
+        self.assertTrue(issubclass(MmapOutOfMemoryError, RuntimeError))
         self.assertTrue(issubclass(QueueClosedError, RuntimeError))
         self.assertTrue(issubclass(QueueCorruptError, RuntimeError))
         self.assertTrue(issubclass(SchemaMismatchError, RuntimeError))

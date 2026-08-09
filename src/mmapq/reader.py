@@ -71,8 +71,7 @@ class IndexedReader:
             directory.encode(), queue_name.encode(),
             ring_size, timeout_ns, rt, ptr,
         )
-        if rc != 0:
-            raise RuntimeError(f"indexed_reader_create failed with code {rc}")
+        check_rc(rc, "indexed_reader_create")
         return cls(ptr[0], runtime=runtime)
 
     def read(self, index: int) -> Optional[bytes]:
@@ -230,8 +229,7 @@ class IndexedBatchReader:
             directory.encode(), queue_name.encode(),
             ring_size, timeout_ns, rt, ptr,
         )
-        if rc != 0:
-            raise RuntimeError(f"indexed_batch_reader_create failed with code {rc}")
+        check_rc(rc, "indexed_batch_reader_create")
         return cls(ptr[0])
 
     def read(self, index: int) -> Optional[list[bytes]]:

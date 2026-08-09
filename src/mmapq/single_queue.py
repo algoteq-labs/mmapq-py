@@ -50,8 +50,7 @@ class IndexedQueue:
             4096 * 1024, 4, 1, (4096 * 1024) * 256,
             0, 10000000000, arch_int, wr, rr, ptr,
         )
-        if rc != 0:
-            raise RuntimeError(f"indexed_queue_create failed with code {rc}")
+        check_rc(rc, "indexed_queue_create")
         return cls(ptr[0], runtime=runtime)
 
     def create_appender(self):

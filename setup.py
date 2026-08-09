@@ -186,7 +186,7 @@ ffi.cdef("""
 
     int indexed_reader_create(
         const char*, const char*, int, uint64_t, Runtime*, IndexedReader**);
-    int indexed_queue_create_reader(IndexedQueue*, IndexedReader**);
+    int indexed_queue_create_reader(IndexedQueue*, IndexedReader**);  /* declared but no Python wrapper yet */
     ReadingContext *indexed_reader_read(
         IndexedReader*, int64_t, ReadingContext*);
     ReadingContext *indexed_reader_read_first(
