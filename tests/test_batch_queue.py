@@ -351,6 +351,11 @@ class TestErrors(unittest.TestCase):
         self.assertTrue(issubclass(QueueExistsError, MmapqError))
         self.assertTrue(issubclass(AppenderIdConflictError, MmapqError))
 
+    def test_eio_error_via_check_rc(self):
+        from mmapq import MmapqError, check_rc
+        with self.assertRaises(MmapqError):
+            check_rc(-10, "test_eio")
+
 
 class TestArchivable(unittest.TestCase):
     """Tests for archivable parameter."""
