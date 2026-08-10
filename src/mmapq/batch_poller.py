@@ -12,6 +12,7 @@ stream messages lazily — if you need that, fall back to raw FFI calls.
 
 from __future__ import annotations
 
+import weakref
 from typing import Callable
 
 from . import _cffi as _cffi_mod
@@ -74,6 +75,7 @@ class IndexedBatchPoller:
         self._handle = ffi.new_handle(self)
         self._current_handler = None
         self._pending_exc = None
+        self._finalizer = weakref.finalize(self, _destroy_batch_poller, inner)
 
     def poll(self, handler):
         """Poll the next batch, delivering it to the handler.
@@ -126,6 +128,7 @@ class IndexedBatchPoller:
 
     def close(self):
         if self._inner is not None:
+            self._finalizer.detach()
             lib.indexed_batch_poller_close(self._inner)
             self._inner = None
 
@@ -135,7 +138,3 @@ class IndexedBatchPoller:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         return False
-
-    def __del__(self):
-        if self._inner is not None:
-            lib.indexed_batch_poller_close(self._inner)

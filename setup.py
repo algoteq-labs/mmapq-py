@@ -129,6 +129,8 @@ ffi.cdef("""
         IndexedBatchQueue*, IndexedBatchPoller**);
     int indexed_batch_queue_create_appender(
         IndexedBatchQueue*, IndexedBatchAppender**);
+    int indexed_batch_queue_create_appender_with_id(
+        IndexedBatchQueue*, uint8_t, IndexedBatchAppender**);
     void indexed_batch_queue_close(IndexedBatchQueue*);
 
     /* ── Batch poller ─────────────────────────────────────────────────────── */
@@ -171,6 +173,7 @@ ffi.cdef("""
                       MutableBatch*, BatchPayloadIterator*);
     void          indexed_batch_appender_discard_batch(
                       IndexedBatchAppender*, int64_t);
+    uint8_t       indexed_batch_appender_id(const IndexedBatchAppender*);
     void          indexed_batch_appender_close(IndexedBatchAppender*);
 
     /* ── EntryStatus (indexed_reader.h:42) ───────────────────────────────────── */

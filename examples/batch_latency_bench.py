@@ -19,7 +19,7 @@ import threading
 import time
 import struct
 
-from mmapq import IndexedBatchQueue, NextMove, PollResult, ffi, lib
+from mmapq import IndexedBatchQueue, NextMove, PollResult
 
 SHUTDOWN_SEQ = 0
 LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence
@@ -112,15 +112,9 @@ class BatchLatencyProbe:
         my_id = self.instance_id
         my_seq = self.current_seq
 
-        def response_handler(_bi, ctx):
-            it = ffi.addressof(ctx.batch_iterator)
-            if not lib.batch_iterator_advance(it):
-                return NextMove.ADVANCE
-            length = lib.batch_iterator_current_length_ffi(it)
-            if length >= 6:
-                data_ptr = lib.batch_iterator_current_data_ffi(it)
-                data = bytes(ffi.buffer(data_ptr, length))
-                (rid, rseq) = struct.unpack(LATENCY_HEADER_FMT, data[:6])
+        def response_handler(_bi, messages):
+            if messages and len(messages[0]) >= 6:
+                (rid, rseq) = struct.unpack(LATENCY_HEADER_FMT, messages[0][:6])
                 if rid == my_id and rseq == my_seq:
                     self.response_received = True
             return NextMove.ADVANCE
@@ -151,15 +145,9 @@ class BatchLatencyProbe:
 
         timeout_at = monotonic_nanos() + 2_000_000_000
 
-        def shutdown_handler(_bi, ctx):
-            it = ffi.addressof(ctx.batch_iterator)
-            if not lib.batch_iterator_advance(it):
-                return NextMove.ADVANCE
-            length = lib.batch_iterator_current_length_ffi(it)
-            if length >= 6:
-                data_ptr = lib.batch_iterator_current_data_ffi(it)
-                data = bytes(ffi.buffer(data_ptr, length))
-                (_, rseq) = struct.unpack(LATENCY_HEADER_FMT, data[:6])
+        def shutdown_handler(_bi, messages):
+            if messages and len(messages[0]) >= 6:
+                (_, rseq) = struct.unpack(LATENCY_HEADER_FMT, messages[0][:6])
                 if rseq == SHUTDOWN_SEQ:
                     self.response_received = True
             return NextMove.ADVANCE
@@ -185,23 +173,20 @@ def internal_server(directory,
 
     shutdown = False
 
-    def echo_handler(batch_index, ctx):
+    def echo_handler(batch_index, messages):
         nonlocal shutdown
-        it = ffi.addressof(ctx.batch_iterator)
-        if not lib.batch_iterator_advance(it):
+        if not messages:
             return NextMove.ADVANCE
-        length = lib.batch_iterator_current_length_ffi(it)
-        data_ptr = lib.batch_iterator_current_data_ffi(it)
-        data = bytes(ffi.buffer(data_ptr, length))
 
-        if len(data) >= 6:
-            (_, seq) = struct.unpack(LATENCY_HEADER_FMT, data[:6])
+        first = messages[0]
+        if len(first) >= 6:
+            (_, seq) = struct.unpack(LATENCY_HEADER_FMT, first[:6])
             if seq == SHUTDOWN_SEQ:
                 shutdown = True
 
         with appender.start_batch() as writer:
-            writer.append(data)
-            writer.append_remaining_from(it)
+            for msg in messages:
+                writer.append(msg)
             writer.commit()
 
         return NextMove.ADVANCE

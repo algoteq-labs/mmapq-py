@@ -172,42 +172,41 @@ def handler(index, appender_id, data):
 
 ### Batch handler callback
 
-The handler passed to `poller.poll()` receives `(batch_index: int, ctx: CData)`:
+The handler passed to `poller.poll()` receives `(batch_index: int, messages: list[bytes])`:
 
 ```python
-def handler(batch_index, ctx):
-    # ctx is a cffi pointer to BatchReadingContext
-    # ctx.message_count — number of messages in the batch
-    # ctx.status — BatchEntryStatus
-
-    # Access messages via the iterator:
-    from mmapq import ffi, lib
-    it = ffi.addressof(ctx.batch_iterator)
-
-    if not lib.batch_iterator_advance(it):
-        return NextMove.ADVANCE
-
-    length = lib.batch_iterator_current_length_ffi(it)
-    data_ptr = lib.batch_iterator_current_data_ffi(it)
-    data = bytes(ffi.buffer(data_ptr, length))
-
-    # data is the first message payload
+def handler(batch_index, messages):
+    # messages is a list of payload bytes, one per message in the batch
+    for msg in messages:
+        print(f"[{batch_index}] {msg}")
     return NextMove.ADVANCE
 ```
 
 ### Additional appender methods
 
-`IndexedAppender` also provides:
+`IndexedAppender` (single-message) also provides:
 
 - **`append_uncommitted(data)`** — writes payload without committing. Invisible to readers,
   discarded by crash recovery. Returns a payload offset for later use with `commit()`.
 - **`commit(payload_offset)`** — publishes a previously uncommitted payload. Returns the
   committed index.
 
-`IndexedQueue` also provides:
+`IndexedQueue` (single-message) also provides:
 
 - **`create_appender_with_id(appender_id)`** — creates an appender with a specific lane ID
   (0–255). Raises `ValueError` if the ID is out of range.
+
+`IndexedBatchQueue` (batch) also provides:
+
+- **`create_appender_with_id(appender_id)`** — creates a batch appender with a specific lane ID
+  (0–255). Raises `ValueError` if the ID is out of range.
+- **`create(directory, queue_name, *, region_size=..., ring_size=..., max_file_size=..., start_index=..., timeout_ns=..., archivable=..., runtime=...)`**
+  — full-configuration create. All params match the C library's `INDEXED_QUEUE_DEFAULT_*` constants.
+  Existing queues ignore sizing params (on-disk config is authoritative).
+
+`IndexedBatchAppender` (batch) also provides:
+
+- **`id()`** — returns this appender's lane ID (0–255).
 
 ### Sync vs async mapping
 

@@ -1317,6 +1317,50 @@ class TestProducerCompletion(unittest.TestCase):
             q.create_appender_with_id(256)
         q.close()
 
+    def test_batch_create_appender_with_id(self):
+        q = IndexedBatchQueue.create(self.test_dir, "bq")
+        a = q.create_appender_with_id(7)
+        self.assertEqual(a.id(), 7)
+        with a.start_batch() as w:
+            w.append(b"hello")
+            w.commit()
+        a.close()
+        p = q.create_poller()
+        messages = []
+        def handler(bi, msgs):
+            messages.extend(msgs)
+            return NextMove.ADVANCE
+        p.poll(handler)
+        self.assertEqual(messages, [b"hello"])
+        p.close()
+        q.close()
+
+    def test_batch_create_appender_with_bad_id_raises(self):
+        q = IndexedBatchQueue.create(self.test_dir, "bq")
+        with self.assertRaises(ValueError):
+            q.create_appender_with_id(256)
+        q.close()
+
+    def test_batch_appender_id(self):
+        q = IndexedBatchQueue.create(self.test_dir, "bq")
+        a = q.create_appender()
+        self.assertIsInstance(a.id(), int)
+        self.assertTrue(0 <= a.id() <= 255)
+        a.close()
+        q.close()
+
+    def test_writer_double_commit(self):
+        from mmapq import MmapqError
+        q = IndexedBatchQueue.create(self.test_dir, "bq")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"msg")
+            w.commit()
+        with self.assertRaises(MmapqError):
+            w.commit()
+        a.close()
+        q.close()
+
 
 class TestRuntime(unittest.TestCase):
     """Tests for the Runtime class and async mapping."""
@@ -1378,6 +1422,26 @@ class TestRuntime(unittest.TestCase):
             return NextMove.ADVANCE
         p.poll(handler)
         self.assertEqual(messages, [b"test"])
+        a.close()
+        p.close()
+        q.close()
+
+    def test_batch_queue_with_custom_config(self):
+        q = IndexedBatchQueue.create(
+            self.test_dir, "rt4",
+            region_size=8192*1024, ring_size=2,
+            runtime=Runtime.region_mapper())
+        a = q.create_appender()
+        p = q.create_poller()
+        with a.start_batch() as w:
+            w.append(b"batch config test")
+            w.commit()
+        messages = []
+        def handler(bi, msgs):
+            messages.extend(msgs)
+            return NextMove.ADVANCE
+        p.poll(handler)
+        self.assertEqual(messages, [b"batch config test"])
         a.close()
         p.close()
         q.close()
@@ -1516,6 +1580,44 @@ class TestCloseIdempotent(unittest.TestCase):
         rt.close()
         rt.close()
         del rt; gc.collect()
+
+    def test_single_poller_finalizer_cleanup(self):
+        q = IndexedQueue.create(self.test_dir, "sp")
+        a = q.create_appender()
+        a.append(b"gc test")
+        a.close()
+        p = q.create_poller()
+        del p
+        gc.collect()
+        p2 = q.create_poller()
+        messages = []
+        def handler(idx, aid, data):
+            messages.append(data)
+            return NextMove.ADVANCE
+        p2.poll(handler)
+        self.assertEqual(messages, [b"gc test"])
+        p2.close()
+        q.close()
+
+    def test_batch_poller_finalizer_cleanup(self):
+        q = IndexedBatchQueue.create(self.test_dir, "bp")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"batch gc test")
+            w.commit()
+        a.close()
+        p = q.create_poller()
+        del p
+        gc.collect()
+        p2 = q.create_poller()
+        messages = []
+        def handler(bi, msgs):
+            messages.extend(msgs)
+            return NextMove.ADVANCE
+        p2.poll(handler)
+        self.assertEqual(messages, [b"batch gc test"])
+        p2.close()
+        q.close()
 
 
 if __name__ == "__main__":

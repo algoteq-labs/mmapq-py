@@ -57,6 +57,8 @@ class BatchWriter:
         Returns the committed batch index. The writer is consumed — do not
         use after calling commit().
         """
+        if self._committed:
+            raise MmapqError("batch already committed")
         offset = lib.mutable_batch_complete(self._inner)
         if offset < 0:
             raise MmapqError("mutable_batch_complete failed")
@@ -95,6 +97,10 @@ class IndexedBatchAppender:
         if not ptr:
             raise MmapqError("start_batch returned NULL")
         return BatchWriter(self, ptr)
+
+    def id(self) -> int:
+        """Return this appender's lane ID (0–255)."""
+        return lib.indexed_batch_appender_id(self._inner)
 
     def close(self):
         self._finalizer.detach()
