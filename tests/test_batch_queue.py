@@ -1341,6 +1341,14 @@ class TestProducerCompletion(unittest.TestCase):
             q.create_appender_with_id(256)
         q.close()
 
+    def test_batch_create_appender_with_id_conflict_raises(self):
+        q = IndexedBatchQueue.create(self.test_dir, "bq")
+        a1 = q.create_appender_with_id(7)
+        with self.assertRaises(AppenderIdConflictError):
+            q.create_appender_with_id(7)
+        a1.close()
+        q.close()
+
     def test_batch_appender_id(self):
         q = IndexedBatchQueue.create(self.test_dir, "bq")
         a = q.create_appender()

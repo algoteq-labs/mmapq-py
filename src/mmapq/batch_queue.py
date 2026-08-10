@@ -56,6 +56,10 @@ class IndexedBatchQueue:
         """
         if max_file_size is None:
             max_file_size = region_size * 256
+        elif max_file_size <= 0:
+            raise ValueError(
+                f"max_file_size must be positive, got {max_file_size}")
+        regions_to_map_ahead = 1  # match INDEXED_QUEUE_DEFAULT_REGIONS_TO_MAP_AHEAD
         wr = write_runtime if write_runtime is not None else ffi.NULL
         rr = read_runtime if read_runtime is not None else ffi.NULL
         arch_int = 1 if archivable else 0
@@ -65,7 +69,7 @@ class IndexedBatchQueue:
         ptr = ffi.new("IndexedBatchQueue **")
         rc = lib.indexed_batch_queue_create(
             directory.encode(), queue_name.encode(),
-            region_size, ring_size, 1, max_file_size,
+            region_size, ring_size, regions_to_map_ahead, max_file_size,
             start_index, timeout_ns, arch_int, wr, rr, ptr,
         )
         check_rc(rc, "indexed_batch_queue_create")
@@ -94,8 +98,8 @@ class IndexedBatchQueue:
     def create_appender_with_id(self, appender_id: int):
         """Create a batch appender with a specific lane ID (0–255).
 
-        Validates that the ID is in range before the FFI call.
-        Raises ValueError if the ID is out of range or already in use.
+        Raises ValueError if the ID is out of range.
+        Raises AppenderIdConflictError if the ID is already in use.
         """
         if not 0 <= appender_id < 256:
             raise ValueError(
