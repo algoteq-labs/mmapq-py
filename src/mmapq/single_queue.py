@@ -38,8 +38,8 @@ class IndexedQueue:
         runtime:     optional Runtime for async region mapping (keyword-only)
         archivable:  if True, create archivable (default False)
         """
-        wr = write_runtime if write_runtime is not None else ffi.NULL
-        rr = read_runtime if read_runtime is not None else ffi.NULL
+        wr = write_runtime._inner if write_runtime is not None and write_runtime._inner is not None else ffi.NULL
+        rr = read_runtime._inner if read_runtime is not None and read_runtime._inner is not None else ffi.NULL
         if runtime is not None:
             wr = runtime._inner
             rr = runtime._inner
@@ -51,7 +51,10 @@ class IndexedQueue:
             0, 10000000000, arch_int, wr, rr, ptr,
         )
         check_rc(rc, "indexed_queue_create")
-        return cls(ptr[0], runtime=runtime)
+        q = cls(ptr[0], runtime=runtime)
+        q._write_runtime = write_runtime
+        q._read_runtime = read_runtime
+        return q
 
     def create_appender(self):
         """Create a single-message appender."""

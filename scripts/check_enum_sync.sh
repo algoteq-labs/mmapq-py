@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# check_enum_sync.sh — verify that Python IntEnum members (types.py) match
+# C header enums in name, order, and value.
+# Hard gate: exits 0 on sync, non-zero on divergence.
+#
+# C enum members have prefixes (POLL_, NEXT_, BATCH_ENTRY_, CONFLICT_);
+# Python IntEnum members are bare. The script strips C prefixes before
+# comparing NAME=VALUE pairs in declaration order.
+#
+# Usage:
+#   check_enum_sync.sh            # normal check
+#   check_enum_sync.sh --self-test  # mutation self-test
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+HAD_ERROR=0
+
+# ── Extract C enum NAME=VALUE pairs for a given type ─────────────────────
+# Usage: extract_c_enum <header> <type_name>
+# Outputs "NAME=VALUE" lines. Implicit values (no = N) are resolved by
+# position starting from 0, or continuing from the last explicit value.
+extract_c_enum() {
+    local header="$1"
+    local type_name="$2"
+    awk -v type="$type_name" '
+    /^typedef enum[[:space:]]*\{/ { buf = ""; inbuf = 1; next }
+    inbuf && /^\}/ {
+        rest = substr($0, 2);
+        gsub(/^[[:space:]]+/, "", rest);
+        if (rest == type ";") {
+            n = split(buf, lines, "\n");
+            val = -1;
+            for (i = 1; i <= n; i++) {
+                line = lines[i];
+                gsub(/^[[:space:]]+/, "", line);
+                gsub(/,.*$/, "", line);
+                if (line != "" && line !~ /^[/*]/ && line !~ /^\*/) {
+                    name = line;
+                    gsub(/[[:space:]]*=.*$/, "", name);
+                    if (line ~ /=[[:space:]]*[0-9]+/) {
+                        match(line, /=/);
+                        restval = substr(line, RSTART + 1);
+                        gsub(/^[[:space:]]+/, "", restval);
+                        val = restval + 0;
+                    } else {
+                        val++;
+                    }
+                    print name "=" val;
+                }
+            }
+        }
+        inbuf = 0; buf = "";
+        next;
+    }
+    inbuf { buf = buf $0 "\n"; next }
+    ' "$header"
+}
+
+# ── Extract Python IntEnum NAME=VALUE pairs for a given class ────────────
+# Usage: extract_py_enum <class_name>
+extract_py_enum() {
+    local class_name="$1"
+    local pyfile="$2"
+    awk -v cls="$class_name" '
+    $0 ~ "^class[[:space:]]+" cls "[[:space:]]*\\(enum\\.IntEnum\\)" {
+        collecting = 1;
+        next;
+    }
+    collecting && /^class[[:space:]]+/ {
+        collecting = 0;
+        next;
+    }
+    collecting && /^[[:space:]]+[A-Z_][A-Z_0-9]*[[:space:]]*=/ {
+        line = $0;
+        gsub(/^[[:space:]]+/, "", line);
+        gsub(/,.*$/, "", line);
+        if (line != "" && line !~ /^#/) {
+            match(line, /^([A-Z_][A-Z_0-9]*)[[:space:]]*=[[:space:]]*([0-9]+)/, m);
+            print m[1] "=" m[2];
+        }
+        next;
+    }
+    ' "$pyfile"
+}
+
+# ── Compare C enum NAME=VALUE pairs against Python ───────────────────────
+# C prefixes are stripped before comparison. Both name and value must match.
+check_enum() {
+    local header="$1"
+    local type_name="$2"
+    local prefix="$3"
+    local py_class="$4"
+    local pyfile="$5"
+
+    mapfile -t c_pairs < <(extract_c_enum "$header" "$type_name" | sed "s/^$prefix//")
+    mapfile -t py_pairs < <(extract_py_enum "$py_class" "$pyfile")
+
+    local c_count="${#c_pairs[@]}"
+    local py_count="${#py_pairs[@]}"
+
+    if [ "$c_count" -ne "$py_count" ] || [ "${c_pairs[*]}" != "${py_pairs[*]}" ]; then
+        echo "MISMATCH: $py_class ($header/$type_name, prefix=$prefix)"
+        echo "  C (stripped): ${c_pairs[*]}"
+        echo "  Python:       ${py_pairs[*]}"
+        HAD_ERROR=1
+    fi
+}
+
+# ── Self-test: verify the script detects a value mismatch ──────────────────
+if [ "${1:-}" = "--self-test" ]; then
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    C_INCLUDE="../mmapq/include"
+    if [ ! -f "$C_INCLUDE/poller.h" ]; then
+        echo "self-test: C headers not found -- skipping"
+        exit 0
+    fi
+    cat > "$TMP/types.py" << 'TESTEOF'
+from __future__ import annotations
+import enum
+class PollResult(enum.IntEnum):
+    END_OF_STREAM = 0
+    ADVANCED = 1
+    STOPPED = 2
+    RETREATED = 3
+    ARCHIVED = 4
+    ERROR = 5
+    CORRUPT = 99
+TESTEOF
+    check_enum "$C_INCLUDE/poller.h" "PollResult" "POLL_" "PollResult" "$TMP/types.py"
+    if [ "$HAD_ERROR" -eq 0 ]; then
+        echo "SELF-TEST FAILED: value mismatch not detected"
+        exit 1
+    fi
+    echo "self-test passed"
+    exit 0
+fi
+
+# ── Normal path ────────────────────────────────────────────────────────────
+C_INCLUDE="../mmapq/include"
+if [ ! -f "$C_INCLUDE/poller.h" ]; then
+    echo "check_enum_sync.sh: C headers not found at $C_INCLUDE -- skipping (sdist checkout)"
+    exit 0
+fi
+
+TYPES_PY="src/mmapq/types.py"
+if [ ! -f "$TYPES_PY" ]; then
+    echo "check_enum_sync.sh: types.py not found -- skipping"
+    exit 0
+fi
+
+# ── Enum mapping table ────────────────────────────────────────────────────
+# Format: header_path  C_type_name  C_prefix  Python_class  types_py_path
+check_enum "$C_INCLUDE/poller.h"                "NextMove"          "NEXT_"         "NextMove"         "$TYPES_PY"
+check_enum "$C_INCLUDE/poller.h"                "PollResult"        "POLL_"         "PollResult"       "$TYPES_PY"
+check_enum "$C_INCLUDE/indexed_batch_reader.h"  "BatchEntryStatus"  "BATCH_ENTRY_"  "BatchEntryStatus" "$TYPES_PY"
+check_enum "$C_INCLUDE/queue_transfer.h"        "ConflictBehavior"  "CONFLICT_"     "ConflictBehavior" "$TYPES_PY"
+
+if [ "$HAD_ERROR" -ne 0 ]; then
+    echo "FAIL: enum sync check found mismatches"
+    exit 1
+fi
+
+echo "enum mirrors in sync"

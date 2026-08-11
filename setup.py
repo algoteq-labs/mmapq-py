@@ -18,7 +18,8 @@ ffi.cdef("""
     /* ── Enums ──────────────────────────────────────────────────────────── */
     typedef enum { NEXT_ADVANCE = 0, NEXT_STOP = 1, NEXT_RETREAT = 2 } NextMove;
     typedef enum { POLL_END_OF_STREAM, POLL_ADVANCED, POLL_STOPPED,
-                   POLL_RETREATED, POLL_ARCHIVED, POLL_ERROR } PollResult;
+                   POLL_RETREATED, POLL_ARCHIVED, POLL_ERROR,
+                   POLL_CORRUPT } PollResult;
 
     /* ── Opaque types ────────────────────────────────────────────────────── */
     typedef struct IndexedQueue IndexedQueue;

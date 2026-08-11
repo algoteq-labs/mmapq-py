@@ -194,7 +194,7 @@ class TestBatchQueue(unittest.TestCase):
     def test_batch_append_rejects_oversized_message(self):
         q = IndexedBatchQueue.create(
             self.test_dir, "bq_oversized",
-            region_size=4096, ring_size=4,
+            region_size=4096, ring_size=16,
             runtime=Runtime.region_mapper())
         a = q.create_appender()
 
@@ -903,7 +903,7 @@ class TestTransfer(unittest.TestCase):
         # Create batch queue with start_index=100 via C API
         bq_ptr = ffi.new("IndexedBatchQueue **")
         rc = lib.indexed_batch_queue_create(
-            src_dir.encode(), b"bq", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"bq", 4096, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, bq_ptr)
         self.assertEqual(rc, 0)
         bq = bq_ptr[0]
@@ -934,7 +934,7 @@ class TestTransfer(unittest.TestCase):
         # Create normal queue with start_index=100 via C API
         q_ptr = ffi.new("IndexedQueue **")
         rc = lib.indexed_queue_create(
-            src_dir.encode(), b"q", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"q", 4096, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, q_ptr)
         self.assertEqual(rc, 0)
         q = q_ptr[0]
@@ -960,7 +960,7 @@ class TestTransfer(unittest.TestCase):
 
         bq_ptr = ffi.new("IndexedBatchQueue **")
         rc = lib.indexed_batch_queue_create(
-            src_dir.encode(), b"bq", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"bq", 4096, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, bq_ptr)
         self.assertEqual(rc, 0)
         bq = bq_ptr[0]
@@ -997,7 +997,7 @@ class TestTransfer(unittest.TestCase):
 
         q_ptr = ffi.new("IndexedQueue **")
         rc = lib.indexed_queue_create(
-            src_dir.encode(), b"q", 4096, 4, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"q", 4096, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, q_ptr)
         self.assertEqual(rc, 0)
         q = q_ptr[0]
@@ -1644,6 +1644,50 @@ class TestCloseIdempotent(unittest.TestCase):
         p2.poll(handler)
         self.assertEqual(messages, [b"batch gc test"])
         p2.close()
+        q.close()
+
+
+    def test_batch_queue_with_explicit_runtimes(self):
+        rt = Runtime.region_mapper()
+        q = IndexedBatchQueue.create(
+            self.test_dir, "bq_explicit_rts",
+            write_runtime=rt, read_runtime=rt)
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"msg0")
+            idx = w.commit()
+        self.assertEqual(idx, 0)
+        p = q.create_poller()
+        messages = []
+        def handler(bi, msgs):
+            messages.extend(msgs)
+            return NextMove.ADVANCE
+        p.poll(handler)
+        self.assertEqual(messages, [b"msg0"])
+        a.close()
+        p.close()
+        q.close()
+        rt.close()
+
+    def test_writer_rollback_on_clean_exit(self):
+        q = IndexedBatchQueue.create(self.test_dir, "bq_rollback")
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"will_rollback")
+        p = q.create_poller()
+        messages = []
+        def handler(bi, msgs):
+            messages.extend(msgs)
+            return NextMove.ADVANCE
+        result = p.poll(handler)
+        self.assertEqual(result, PollResult.END_OF_STREAM)
+        self.assertEqual(messages, [])
+        reader = IndexedBatchReader.create(
+            self.test_dir, "bq_rollback", runtime=q._runtime)
+        last = reader.last_index()
+        self.assertEqual(last, -1)
+        p.close()
+        a.close()
         q.close()
 
 
