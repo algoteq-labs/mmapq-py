@@ -75,9 +75,18 @@ extract_py_enum() {
         line = $0;
         gsub(/^[[:space:]]+/, "", line);
         gsub(/,.*$/, "", line);
+        gsub(/[[:space:]]*#.*$/, "", line);
         if (line != "" && line !~ /^#/) {
-            match(line, /^([A-Z_][A-Z_0-9]*)[[:space:]]*=[[:space:]]*([0-9]+)/, m);
-            print m[1] "=" m[2];
+            split(line, a, /[[:space:]]*=[[:space:]]*/);
+            gsub(/^[[:space:]]+/, "", a[1]);
+            gsub(/[[:space:]]+$/, "", a[1]);
+            gsub(/^[[:space:]]+/, "", a[2]);
+            gsub(/[[:space:]]+$/, "", a[2]);
+            if (a[2] ~ /^[0-9]+$/) {
+                print a[1] "=" a[2];
+            } else {
+                print a[1] "=BAD";
+            }
         }
         next;
     }
@@ -107,7 +116,7 @@ check_enum() {
     fi
 }
 
-# ── Self-test: verify the script detects a value mismatch ──────────────────
+# ── Self-test: verify both positive and negative directions ───────────────
 if [ "${1:-}" = "--self-test" ]; then
     TMP=$(mktemp -d)
     trap 'rm -rf "$TMP"' EXIT
@@ -116,6 +125,16 @@ if [ "${1:-}" = "--self-test" ]; then
         echo "self-test: C headers not found -- skipping"
         exit 0
     fi
+
+    # Positive: correct tree must exit 0
+    HAD_ERROR=0
+    check_enum "$C_INCLUDE/poller.h" "PollResult" "POLL_" "PollResult" "src/mmapq/types.py"
+    if [ "$HAD_ERROR" -ne 0 ]; then
+        echo "SELF-TEST FAILED: correct tree reported mismatch"
+        exit 1
+    fi
+
+    # Negative: mutated value must exit 1
     cat > "$TMP/types.py" << 'TESTEOF'
 from __future__ import annotations
 import enum
@@ -128,11 +147,13 @@ class PollResult(enum.IntEnum):
     ERROR = 5
     CORRUPT = 99
 TESTEOF
+    HAD_ERROR=0
     check_enum "$C_INCLUDE/poller.h" "PollResult" "POLL_" "PollResult" "$TMP/types.py"
     if [ "$HAD_ERROR" -eq 0 ]; then
         echo "SELF-TEST FAILED: value mismatch not detected"
         exit 1
     fi
+
     echo "self-test passed"
     exit 0
 fi
