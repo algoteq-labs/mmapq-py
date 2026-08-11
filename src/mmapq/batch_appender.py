@@ -5,7 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
-from ._errors import MmapqError
+from ._errors import MmapqError, check_rc
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -36,20 +36,23 @@ class BatchWriter:
         """Append a message to the in-progress batch.
 
         Returns the zero-based message index within the batch.
+        Raises ValueError if data is empty or exceeds region_size.
         """
         buf = ffi.from_buffer(data)
-        result = lib.mutable_batch_append(self._inner, buf, len(data))
-        if result < 0:
-            raise MmapqError("mutable_batch_append failed")
-        return result
+        rc = lib.mutable_batch_append(self._inner, buf, len(data))
+        return check_rc(rc, "mutable_batch_append")
 
     def append_remaining_from(self, it) -> int:
         """Append all remaining messages from a BatchPayloadIterator.
 
         The iterator must be positioned before or at the first un-copied
         message. Returns the number of messages appended.
+        Raises ValueError if a message exceeds the destination queue's
+        region_size — the batch is partially populated and must be
+        discarded, not committed.
         """
-        return lib.mutable_batch_append_remaining_from(self._inner, it)
+        rc = lib.mutable_batch_append_remaining_from(self._inner, it)
+        return check_rc(rc, "append_remaining_from")
 
     def commit(self) -> int:
         """Complete and commit the batch.

@@ -191,6 +191,21 @@ class TestBatchQueue(unittest.TestCase):
         a.close()
         q.close()
 
+    def test_batch_append_rejects_oversized_message(self):
+        q = IndexedBatchQueue.create(
+            self.test_dir, "bq_oversized",
+            region_size=4096, ring_size=4,
+            runtime=Runtime.region_mapper())
+        a = q.create_appender()
+
+        with a.start_batch() as w:
+            ok = w.append(b"small")
+            self.assertEqual(ok, 0)
+
+            big = b"x" * 4096
+            with self.assertRaises(ValueError):
+                w.append(big)
+
 
 class TestSingleQueue(unittest.TestCase):
     """Tests for the single-message queue bindings."""
@@ -319,7 +334,6 @@ class TestSingleQueue(unittest.TestCase):
         p.close()
         a.close()
         q.close()
-
 
 class TestErrors(unittest.TestCase):
     """Tests for error handling."""
