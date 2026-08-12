@@ -20,7 +20,7 @@ from . import _cffi as _cffi_mod
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 from .types import NextMove, PollResult
-from ._errors import QueueCorruptError
+from ._errors import QueueCorruptError, check_rc
 
 
 def iter_batch_messages(ctx: "CData") -> list[bytes]:
@@ -99,6 +99,8 @@ class IndexedBatchPoller:
                 exc = self._pending_exc
                 self._pending_exc = None
                 raise exc
+            if result == PollResult.ERROR:
+                check_rc(lib.indexed_batch_poller_last_error(self._inner), "indexed_batch_poller_poll")
             if result == PollResult.CORRUPT:
                 raise QueueCorruptError("batch poll: committed batch payload is corrupt")
             return PollResult(result)

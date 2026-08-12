@@ -433,8 +433,21 @@ class TestQueueType(unittest.TestCase):
         a.close()
         q.close()
         r = IndexedReader.create(self.test_dir, "bq")
-        with self.assertRaises(MmapqError):
+        with self.assertRaises(SchemaMismatchError):
             r.read(0)
+
+    def test_poller_wrong_type_raises_schema_mismatch(self):
+        bq = IndexedBatchQueue.create(self.test_dir, "bbq")
+        a = bq.create_appender()
+        w = a.start_batch()
+        w.append(b"msg")
+        w.commit()
+        a.close()
+        bq.close()
+        q = IndexedQueue.create(self.test_dir, "bbq")
+        p = q.create_poller()
+        with self.assertRaises(SchemaMismatchError):
+            p.poll(lambda i, aid, data: NextMove.ADVANCE)
 
     def test_poller_before_queue_then_data_arrives(self):
         """Standalone poller on non-existent path: first poll END_OF_STREAM,
@@ -487,9 +500,9 @@ class TestQueueType(unittest.TestCase):
                          "C code wrote to stderr despite error code propagation")
 
     def test_schema_mismatch_error_importable(self):
-        from mmapq import MmapqError, SchemaMismatchError
-        self.assertTrue(issubclass(SchemaMismatchError, MmapqError))
+        from mmapq import MmapqError, SchemaMismatchError, NextMove, IndexedQueue
 
+        self.assertTrue(issubclass(SchemaMismatchError, MmapqError))
 
 class TestReader(unittest.TestCase):
     """Tests for random-access IndexedReader."""

@@ -158,6 +158,9 @@ class IndexedReader:
         if status == EntryStatus.AVAILABLE:
             return
         if status == EntryStatus.ERROR:
+            rc = lib.indexed_reader_last_error(self._inner)
+            if rc != 0:
+                check_rc(rc, "indexed_reader_read")
             raise MmapqError(
                 "indexed_reader_read: ENTRY_ERROR (mapping timeout or I/O failure)")
         raise QueueCorruptError(
@@ -317,6 +320,9 @@ class IndexedBatchReader:
                       BatchEntryStatus.ARCHIVED):
             return None
         if status == BatchEntryStatus.ERROR:
+            rc = lib.indexed_batch_reader_last_error(self._inner)
+            if rc != 0:
+                check_rc(rc, "indexed_batch_reader_read")
             raise MmapqError(
                 "indexed_batch_reader_read: ENTRY_ERROR "
                 "(mapping timeout or I/O failure)")

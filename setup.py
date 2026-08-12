@@ -100,6 +100,7 @@ ffi.cdef("""
     int64_t        indexed_poller_current_index(const IndexedPoller*);
     int64_t        indexed_poller_start_index(IndexedPoller*);
     int            indexed_poller_exists(IndexedPoller*, int64_t);
+    int            indexed_poller_last_error(const IndexedPoller*);
     void           indexed_poller_close(IndexedPoller*);
 
     /* ── Batch queue factory ───────────────────────────────────────────────── */
@@ -136,6 +137,8 @@ ffi.cdef("""
         IndexedBatchPoller*);
     int                 indexed_batch_poller_exists(
         IndexedBatchPoller*, int64_t);
+    int                 indexed_batch_poller_last_error(
+        const IndexedBatchPoller*);
     void                indexed_batch_poller_close(
         IndexedBatchPoller*);
 
@@ -183,6 +186,7 @@ ffi.cdef("""
     int64_t indexed_reader_last_index(IndexedReader*);
     int64_t indexed_reader_start_index(IndexedReader*);
     EntryStatus indexed_reader_entry_status(IndexedReader*, int64_t);
+    int     indexed_reader_last_error(const IndexedReader*);
     void    indexed_reader_close(IndexedReader*);
 
     /* ── IndexedBatchReader (indexed_batch_reader.h:35) ───────────────────────── */
@@ -199,6 +203,7 @@ ffi.cdef("""
     int64_t indexed_batch_reader_last_index(IndexedBatchReader*);
     int64_t indexed_batch_reader_start_index(IndexedBatchReader*);
     int     indexed_batch_reader_entry_status(IndexedBatchReader*, int64_t);
+    int     indexed_batch_reader_last_error(const IndexedBatchReader*);
     void    indexed_batch_reader_close(IndexedBatchReader*);
 
     /* ── libc helpers for FILE* I/O ───────────────────────────────────────────── */
