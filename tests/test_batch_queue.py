@@ -1832,5 +1832,28 @@ class TestCloseIdempotent(unittest.TestCase):
         q.close()
 
 
+    def test_constructor_rejects_string(self):
+        with self.assertRaises(TypeError):
+            IndexedQueue("/tmp")
+        with self.assertRaises(TypeError):
+            IndexedQueue(inner="/tmp")
+        with self.assertRaises(TypeError):
+            IndexedBatchQueue("/tmp")
+        with self.assertRaises(TypeError):
+            IndexedBatchQueue(inner="/tmp")
+
+    def test_constructor_rejects_wrong_ptr_type(self):
+        bq = IndexedBatchQueue.create(self.test_dir, "bq_wrong_ptr")
+        with self.assertRaises(TypeError):
+            IndexedQueue(bq._inner)
+        bq.close()
+
+    def test_constructor_rejects_null(self):
+        with self.assertRaises(ValueError):
+            IndexedQueue(ffi.NULL)
+        with self.assertRaises(ValueError):
+            IndexedBatchQueue(ffi.NULL)
+
+
 if __name__ == "__main__":
     unittest.main()

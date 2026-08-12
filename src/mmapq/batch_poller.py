@@ -16,6 +16,7 @@ import weakref
 from typing import Callable
 
 from . import _cffi as _cffi_mod
+from ._cdata import require_cdata
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -70,6 +71,7 @@ class IndexedBatchPoller:
     """
 
     def __init__(self, inner):
+        require_cdata(inner, "struct IndexedBatchPoller *", "IndexedBatchPoller")
         self._inner = inner
         self._runtime = None
         self._handle = ffi.new_handle(self)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
+from ._cdata import require_cdata
 from ._errors import check_rc
 
 ffi = _cffi_mod.ffi
@@ -24,6 +25,7 @@ class IndexedAppender:
     """
 
     def __init__(self, inner):
+        require_cdata(inner, "struct IndexedAppender *", "IndexedAppender")
         self._inner = inner
         self._runtime = None
         self._finalizer = weakref.finalize(self, _destroy_appender, inner)

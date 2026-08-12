@@ -5,6 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
+from ._cdata import require_cdata
 from ._errors import check_rc
 
 ffi = _cffi_mod.ffi
@@ -25,6 +26,7 @@ class IndexedArchiver:
     """
 
     def __init__(self, inner):
+        require_cdata(inner, "struct IndexedArchiver *", "IndexedArchiver")
         self._inner = inner
         self._finalizer = weakref.finalize(self, _destroy_archiver, inner)
 
@@ -110,6 +112,7 @@ class IndexedBatchArchiver:
     """
 
     def __init__(self, inner):
+        require_cdata(inner, "struct IndexedBatchArchiver *", "IndexedBatchArchiver")
         self._inner = inner
         self._finalizer = weakref.finalize(self, _destroy_batch_archiver, inner)
 

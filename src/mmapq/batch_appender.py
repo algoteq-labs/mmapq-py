@@ -5,6 +5,7 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
+from ._cdata import require_cdata
 from ._errors import MmapqError, check_rc
 
 ffi = _cffi_mod.ffi
@@ -89,6 +90,7 @@ class IndexedBatchAppender:
     """
 
     def __init__(self, inner):
+        require_cdata(inner, "struct IndexedBatchAppender *", "IndexedBatchAppender")
         self._inner = inner
         self._runtime = None
         self._finalizer = weakref.finalize(self, _destroy_batch_appender, inner)

@@ -7,6 +7,7 @@ import weakref
 from typing import Optional
 
 from . import _cffi as _cffi_mod
+from ._cdata import require_cdata
 from ._errors import MmapqError, QueueClosedError, QueueCorruptError, check_rc
 
 ffi = _cffi_mod.ffi
@@ -44,6 +45,7 @@ class IndexedReader:
     """
 
     def __init__(self, inner, *, runtime=None):
+        require_cdata(inner, "struct IndexedReader *", "IndexedReader")
         self._inner = inner
         self._runtime = runtime
         self._ctx = ffi.new("ReadingContext *")
@@ -207,6 +209,7 @@ class IndexedBatchReader:
     """
 
     def __init__(self, inner, *, runtime=None):
+        require_cdata(inner, "struct IndexedBatchReader *", "IndexedBatchReader")
         self._inner = inner
         self._runtime = runtime
         self._ctx = ffi.new("BatchReadingContext *")
