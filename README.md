@@ -59,9 +59,9 @@ with appender.start_batch() as batch:      # context manager = transaction
     batch.append(b"event 1")
     batch.append(b"event 2")
     batch.append(b"event 3")
-# leaving the block without an exception commits the batch atomically;
-# an exception inside the block discards it — the events never become
-# visible. This is the command/event rollback semantics in one construct.
+# leaving the block discards the batch — call batch.commit() to persist;
+# an exception inside the block also discards it, so uncommitted data
+# never becomes visible. This is the command/event rollback semantics.
 ```
 
 ### Reading and replay (random access)

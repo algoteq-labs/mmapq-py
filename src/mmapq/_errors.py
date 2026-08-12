@@ -31,6 +31,7 @@ class MmapOutOfMemoryError(MmapqError):
 
 
 _RC_ERRORS = {
+    -11: (MmapqError, "queue meta file exists but not yet fully initialised — retry"),
     -10: (MmapqError, "I/O error — metadata file write failure, retry"),
     -9: (MmapOutOfMemoryError, "internal allocation failure"),
     -8: (AppenderIdConflictError, "appender ID already in use"),

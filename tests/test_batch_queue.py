@@ -20,6 +20,8 @@ from mmapq import (
     IndexedBatchReader,
     IndexedArchiver,
     Runtime,
+    MmapqError,
+    SchemaMismatchError,
     QueueExistsError,
     AppenderIdConflictError,
     ConflictBehavior,
@@ -418,9 +420,71 @@ class TestQueueType(unittest.TestCase):
         a.append(b"stamp-normal")
         a.close()
         q.close()
-        with self.assertRaises(Exception):
+        with self.assertRaises(SchemaMismatchError):
             bq = IndexedBatchQueue.create(self.test_dir, "q")
             bq.create_appender()
+
+    def test_reader_on_wrong_queue_type_raises(self):
+        q = IndexedBatchQueue.create(self.test_dir, "bq")
+        a = q.create_appender()
+        w = a.start_batch()
+        w.append(b"msg")
+        w.commit()
+        a.close()
+        q.close()
+        r = IndexedReader.create(self.test_dir, "bq")
+        with self.assertRaises(MmapqError):
+            r.read(0)
+
+    def test_poller_before_queue_then_data_arrives(self):
+        """Standalone poller on non-existent path: first poll END_OF_STREAM,
+        then queue appears, next poll sees data."""
+        polldir = os.path.join(self.test_dir, "pb")
+        qname = "q"
+        os.makedirs(polldir, exist_ok=True)
+        ptr = ffi.new("IndexedPoller **")
+        rc = lib.indexed_poller_create(
+            polldir.encode(), qname.encode(), 16, 10000000000, ffi.NULL, ptr)
+        check_rc(rc, "create_poller")
+        p = IndexedPoller(ptr[0])
+        result1 = p.poll(lambda i, aid, data: NextMove.ADVANCE)
+        self.assertEqual(result1, PollResult.END_OF_STREAM,
+                         "first poll on empty path should be END_OF_STREAM")
+        q = IndexedQueue.create(polldir, qname)
+        a = q.create_appender()
+        a.append(b"hello")
+        a.close()
+        q.close()
+        result2 = p.poll(lambda i, aid, data: NextMove.ADVANCE)
+        self.assertEqual(result2, PollResult.ADVANCED,
+                         "poll after queue created should see data")
+        p.close()
+
+    def test_no_stderr_output_on_wrong_type(self):
+        import os, tempfile
+        err_fd = os.dup(2)
+        stderr_path = os.path.join(self.test_dir, "stderr_capture")
+        try:
+            cap_fd = os.open(stderr_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+            os.dup2(cap_fd, 2)
+            os.close(cap_fd)
+            q = IndexedBatchQueue.create(self.test_dir, "bq2")
+            a = q.create_appender()
+            w = a.start_batch()
+            w.append(b"msg")
+            w.commit()
+            a.close()
+            q.close()
+            r = IndexedReader.create(self.test_dir, "bq2")
+            try:
+                r.read(0)
+            except MmapqError:
+                pass
+        finally:
+            os.dup2(err_fd, 2)
+            os.close(err_fd)
+        self.assertEqual(os.path.getsize(stderr_path), 0,
+                         "C code wrote to stderr despite error code propagation")
 
     def test_schema_mismatch_error_importable(self):
         from mmapq import MmapqError, SchemaMismatchError

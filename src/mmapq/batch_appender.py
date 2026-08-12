@@ -17,14 +17,13 @@ def _destroy_batch_appender(inner):
 
 
 class BatchWriter:
-    """An in-progress batch write session.
+    """An in-progress batch write session — discards on exit unless commit() was called.
 
-    Usable as a context manager — automatic rollback on error::
+    Usable as a context manager::
 
         with appender.start_batch() as writer:
             writer.append(b"msg1")
-            writer.append(b"msg2")
-            writer.commit()
+            writer.commit()          # required — without this the batch is discarded
     """
 
     def __init__(self, appender, inner):
