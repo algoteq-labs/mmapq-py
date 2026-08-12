@@ -34,7 +34,7 @@ def iter_batch_messages(ctx: "CData") -> list[bytes]:
     Returns: list[bytes]
     """
     messages = []
-    it_ptr = ffi.addressof(ctx.batch_iterator)
+    it_ptr = ctx.iterator
     while lib.batch_iterator_advance(it_ptr):
         length = lib.batch_iterator_current_length_ffi(it_ptr)
         data_ptr = lib.batch_iterator_current_data_ffi(it_ptr)

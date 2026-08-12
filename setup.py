@@ -31,40 +31,23 @@ ffi.cdef("""
     typedef struct MutableBatch MutableBatch;
     typedef struct Runtime Runtime;
 
-    /* Buffer — embedded in BatchPayloadIterator */
-    typedef struct {
-        unsigned char *data;
-        int32_t        capacity;
-    } Buffer;
-
-    /* BatchPayloadIterator — embedded by value in BatchReadingContext.
-       Full field declaration needed for correct parent struct layout.
-       Field access from Python is through C functions, not directly. */
-    typedef struct {
-        void     *queue_name;
-        void     *payload_acc;
-        Buffer    payload_buf;
-        int64_t   batch_offset;
-        int32_t   message_count;
-        int32_t   current_msg_index;
-        int64_t   current_msg_offset;
-        int32_t   current_msg_length;
-        int64_t   next_message_position;
-        int       exhausted;
-    } BatchPayloadIterator;
+    /* BatchPayloadIterator is opaque — struct definition is private to C.
+       Access through batch_iterator_advance(), batch_iterator_current_data_ffi(),
+       etc. The typedef is needed for pointer declarations in BatchReadingContext. */
+    typedef struct BatchPayloadIterator BatchPayloadIterator;
 
     /* ── BatchReadingContext ──────────────────────────────────────────────── */
     typedef enum { BATCH_ENTRY_AVAILABLE, BATCH_ENTRY_END_OF_STREAM,
                    BATCH_ENTRY_ARCHIVED, BATCH_ENTRY_ERROR } BatchEntryStatus;
 
     typedef struct {
-        int64_t              index;
-        BatchEntryStatus     status;
-        int64_t              batch_offset;
-        int32_t              message_count;
-        uint8_t              appender_id;
-        uint8_t              reserved[3];
-        BatchPayloadIterator batch_iterator;
+        int64_t               index;
+        BatchEntryStatus      status;
+        int64_t               batch_offset;
+        int32_t               message_count;
+        uint8_t               appender_id;
+        uint8_t               reserved[3];
+        BatchPayloadIterator *iterator;
     } BatchReadingContext;
 
     /* ── Handler callback ─────────────────────────────────────────────────── */
