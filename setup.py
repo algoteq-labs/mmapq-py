@@ -34,6 +34,10 @@ ffi.cdef("""
     /* BatchPayloadIterator is opaque — struct definition is private to C.
        Access through batch_iterator_advance(), batch_iterator_current_data_ffi(),
        etc. The typedef is needed for pointer declarations in BatchReadingContext. */
+    typedef struct IndexedReader IndexedReader;
+    typedef struct IndexedBatchReader IndexedBatchReader;
+    typedef struct IndexedArchiver IndexedArchiver;
+    typedef struct IndexedBatchArchiver IndexedBatchArchiver;
     typedef struct BatchPayloadIterator BatchPayloadIterator;
 
     /* ── BatchReadingContext ──────────────────────────────────────────────── */
@@ -116,6 +120,10 @@ ffi.cdef("""
         IndexedBatchQueue*, IndexedBatchAppender**);
     int indexed_batch_queue_create_appender_with_id(
         IndexedBatchQueue*, uint8_t, IndexedBatchAppender**);
+    int indexed_batch_queue_create_reader(
+        IndexedBatchQueue*, IndexedBatchReader**);
+    int indexed_batch_queue_create_archiver(
+        IndexedBatchQueue*, IndexedBatchArchiver**);
     void indexed_batch_queue_close(IndexedBatchQueue*);
 
     /* ── Batch poller ─────────────────────────────────────────────────────── */
@@ -176,7 +184,7 @@ ffi.cdef("""
 
     int indexed_reader_create(
         const char*, const char*, int, uint64_t, Runtime*, IndexedReader**);
-    int indexed_queue_create_reader(IndexedQueue*, IndexedReader**);  /* declared but no Python wrapper yet */
+    int indexed_queue_create_reader(IndexedQueue*, IndexedReader**);
     ReadingContext *indexed_reader_read(
         IndexedReader*, int64_t, ReadingContext*);
     ReadingContext *indexed_reader_read_first(
@@ -278,6 +286,14 @@ ffi.cdef("""
     int64_t          indexed_archiver_start_index(IndexedArchiver*);
     int              indexed_archiver_print_summary(IndexedArchiver*, char*, int);
     void             indexed_archiver_close(IndexedArchiver*);
+
+    /* ── Batch archiver (indexed_batch_archiver.h) ────────────────────────────── */
+    int  indexed_batch_archiver_archivable(IndexedBatchArchiver*);
+    int  indexed_batch_archiver_archive_up_to_index(IndexedBatchArchiver*, int64_t);
+    int  indexed_batch_archiver_archivable_files(IndexedBatchArchiver*, char**, int);
+    int64_t indexed_batch_archiver_start_index(IndexedBatchArchiver*);
+    int  indexed_batch_archiver_start_offset(IndexedBatchArchiver*, uint8_t, int64_t*);
+    void indexed_batch_archiver_close(IndexedBatchArchiver*);
 """)
 
 # ── C source files ─────────────────────────────────────────────────────────

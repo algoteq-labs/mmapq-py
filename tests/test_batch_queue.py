@@ -1465,6 +1465,70 @@ class TestProducerCompletion(unittest.TestCase):
         a.close()
         q.close()
 
+class TestQueueScopedFactory(unittest.TestCase):
+    """Tests for queue-scoped reader/archiver factory methods."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_qsf")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_queue_scoped_reader_inherits_runtime(self):
+        rt = Runtime.region_mapper()
+        q = IndexedBatchQueue.create(
+            self.test_dir, "bq", write_runtime=rt, read_runtime=rt)
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"msg")
+            w.commit()
+        a.close()
+        r = q.create_reader()
+        self.assertIs(r._runtime, rt,
+            "reader should inherit the queue's read_runtime")
+        # Also verify the reader actually works (observable behaviour)
+        batch = r.read(0)
+        self.assertEqual(batch, [b"msg"])
+        r.close()
+        q.close()
+        rt.close()
+
+    def test_single_queue_reader_works(self):
+        q = IndexedQueue.create(self.test_dir, "sq")
+        a = q.create_appender()
+        a.append(b"msg")
+        a.close()
+        r = q.create_reader()
+        msg = r.read(0)
+        self.assertEqual(msg, b"msg")
+        r.close()
+        q.close()
+
+    def test_queue_scoped_archiver_works(self):
+        q = IndexedQueue.create(self.test_dir, "aq", archivable=True)
+        a = q.create_appender()
+        a.append(b"msg")
+        a.close()
+        arch = q.create_archiver()
+        self.assertTrue(arch.archivable())
+        arch.archive_up_to_index(1)
+        arch.close()
+        q.close()
+
+    def test_queue_scoped_batch_archiver_works(self):
+        q = IndexedBatchQueue.create(
+            self.test_dir, "bbq", archivable=True)
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"msg")
+            w.commit()
+        a.close()
+        arch = q.create_archiver()
+        self.assertTrue(arch.archivable())
+        arch.archive_up_to_index(1)
+        arch.close()
+        q.close()
+
 
 class TestRuntime(unittest.TestCase):
     """Tests for the Runtime class and async mapping."""

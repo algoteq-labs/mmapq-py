@@ -94,6 +94,23 @@ class IndexedQueue:
         p._runtime = self._runtime
         return p
 
+    def create_reader(self):
+        """Create a random-access reader inheriting the queue's runtime."""
+        from .reader import IndexedReader
+        ptr = ffi.new("IndexedReader **")
+        rc = lib.indexed_queue_create_reader(self._inner, ptr)
+        check_rc(rc, "create_reader")
+        r = IndexedReader(ptr[0], runtime=self._read_runtime or self._runtime)
+        return r
+
+    def create_archiver(self):
+        """Create an archiver inheriting the queue's runtime."""
+        from .archiver import IndexedArchiver
+        ptr = ffi.new("IndexedArchiver **")
+        rc = lib.indexed_queue_create_archiver(self._inner, ptr)
+        check_rc(rc, "create_archiver")
+        return IndexedArchiver(ptr[0])
+
     def close(self):
         self._finalizer.detach()
         _destroy_queue(self._inner)

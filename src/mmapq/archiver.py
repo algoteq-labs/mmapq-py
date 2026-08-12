@@ -94,3 +94,59 @@ class IndexedArchiver:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         return False
+
+
+def _destroy_batch_archiver(inner):
+    if inner is not None:
+        lib.indexed_batch_archiver_close(inner)
+
+
+class IndexedBatchArchiver:
+    """Archiver for an indexed batch queue.
+
+    Advances the queue's start index so that old batches become
+    inaccessible and their backing files can be safely deleted.
+    Thread-confined. One per consumer/archiver thread.
+    """
+
+    def __init__(self, inner):
+        self._inner = inner
+        self._finalizer = weakref.finalize(self, _destroy_batch_archiver, inner)
+
+    def archivable(self) -> bool:
+        """Return True if the queue was created with archivable=True."""
+        return bool(lib.indexed_batch_archiver_archivable(self._inner))
+
+    def archive_up_to_index(self, index: int) -> None:
+        """Archive all batches up to (but not including) the given index."""
+        check_rc(lib.indexed_batch_archiver_archive_up_to_index(self._inner, index),
+                 "archive_up_to_index")
+
+    def archivable_files(self) -> list[str]:
+        """Return paths to files fully covered by the archive boundary."""
+        max_paths = 256
+        arr = ffi.new("char *[256]")
+        n = lib.indexed_batch_archiver_archivable_files(
+            self._inner, arr, max_paths)
+        check_rc(n, "archivable_files")
+        result = []
+        for i in range(n):
+            result.append(ffi.string(arr[i]).decode())
+        return result
+
+    def start_index(self) -> int:
+        """Return the current start index (first unarchived batch)."""
+        return lib.indexed_batch_archiver_start_index(self._inner)
+
+    def close(self) -> None:
+        """Close the archiver. Idempotent."""
+        self._finalizer.detach()
+        _destroy_batch_archiver(self._inner)
+        self._inner = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False

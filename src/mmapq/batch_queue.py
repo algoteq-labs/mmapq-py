@@ -116,6 +116,23 @@ class IndexedBatchQueue:
         a._runtime = self._runtime
         return a
 
+    def create_reader(self):
+        """Create a batch reader inheriting the queue's runtime."""
+        from .reader import IndexedBatchReader
+        ptr = ffi.new("IndexedBatchReader **")
+        rc = lib.indexed_batch_queue_create_reader(self._inner, ptr)
+        check_rc(rc, "create_reader")
+        r = IndexedBatchReader(ptr[0], runtime=self._read_runtime or self._runtime)
+        return r
+
+    def create_archiver(self):
+        """Create a batch archiver inheriting the queue's runtime."""
+        from .archiver import IndexedBatchArchiver
+        ptr = ffi.new("IndexedBatchArchiver **")
+        rc = lib.indexed_batch_queue_create_archiver(self._inner, ptr)
+        check_rc(rc, "create_archiver")
+        return IndexedBatchArchiver(ptr[0])
+
     def close(self):
         self._finalizer.detach()
         _destroy_batch_queue(self._inner)

@@ -38,7 +38,7 @@ from .transfer import (
     copy_queue, copy_batch_queue, copy_normal_to_batch, copy_batch_to_normal,
 )
 from .runtime import Runtime
-from .archiver import IndexedArchiver
+from .archiver import IndexedArchiver, IndexedBatchArchiver
 
 __all__ = [
     "NextMove",
@@ -69,6 +69,7 @@ __all__ = [
     "copy_batch_to_normal",
     "Runtime",
     "IndexedArchiver",
+    "IndexedBatchArchiver",
     "MmapqError",
     "QueueClosedError",
     "QueueCorruptError",
