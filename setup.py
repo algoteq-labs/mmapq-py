@@ -345,6 +345,7 @@ _rel_sources = [os.path.relpath(p, _script_dir) for p in c_sources]
 ffi.set_source(
     "mmapq._cffi",
     """
+    #include "mmap_platform.h"
     #include "batch_payload_iterator.h"
     #include "indexed_batch_queue.h"
     #include "indexed_batch_poller.h"
