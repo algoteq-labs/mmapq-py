@@ -1,4 +1,4 @@
-"""MmapqRuntime — async region mapper for background mapping."""
+"""Runtime — async region mapper for background mapping."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 
 
-class MmapqRuntime:
+class Runtime:
     """Async region mapper runtime.
 
     Pass to queue factories to enable background region mapping.
@@ -23,7 +23,7 @@ class MmapqRuntime:
         self._finalizer = weakref.finalize(self, _destroy, inner)
 
     @classmethod
-    def region_mapper(cls) -> MmapqRuntime:
+    def region_mapper(cls) -> Runtime:
         """Create the process-wide shared mapper runtime.
 
         The queue and its participants hold a reference to the runtime;

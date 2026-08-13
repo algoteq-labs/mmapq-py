@@ -1,4 +1,4 @@
-"""MmapqIndexedBatchQueue — factory and lifecycle owner for an indexed batch queue."""
+"""IndexedBatchQueue — factory and lifecycle owner for an indexed batch queue."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def _destroy_batch_queue(inner):
         lib.mmapq_indexed_batch_queue_close(inner)
 
 
-class MmapqIndexedBatchQueue:
+class IndexedBatchQueue:
     """Factory for batch queue participants.
 
     Creates pollers and appenders on the same underlying queue.
@@ -25,7 +25,7 @@ class MmapqIndexedBatchQueue:
     """
 
     def __init__(self, inner, *, runtime=None):
-        require_cdata(inner, "struct MmapqIndexedBatchQueue *", "MmapqIndexedBatchQueue")
+        require_cdata(inner, "struct MmapqIndexedBatchQueue *", "IndexedBatchQueue")
         self._inner = inner
         self._runtime = runtime
         self._finalizer = weakref.finalize(self, _destroy_batch_queue, inner)
@@ -82,21 +82,21 @@ class MmapqIndexedBatchQueue:
 
     def create_poller(self):
         """Create a sequential batch poller."""
-        from .batch_poller import MmapqIndexedBatchPoller
+        from .batch_poller import IndexedBatchPoller
         ptr = ffi.new("MmapqIndexedBatchPoller **")
         rc = lib.mmapq_indexed_batch_queue_create_poller(self._inner, ptr)
         check_rc(rc, "create_poller")
-        p = MmapqIndexedBatchPoller(ptr[0])
+        p = IndexedBatchPoller(ptr[0])
         p._runtime = self._runtime
         return p
 
     def create_appender(self):
         """Create a batch appender."""
-        from .batch_appender import MmapqIndexedBatchAppender
+        from .batch_appender import IndexedBatchAppender
         ptr = ffi.new("MmapqIndexedBatchAppender **")
         rc = lib.mmapq_indexed_batch_queue_create_appender(self._inner, ptr)
         check_rc(rc, "create_appender")
-        a = MmapqIndexedBatchAppender(ptr[0])
+        a = IndexedBatchAppender(ptr[0])
         a._runtime = self._runtime
         return a
 
@@ -109,31 +109,31 @@ class MmapqIndexedBatchQueue:
         if not 0 <= appender_id < 256:
             raise ValueError(
                 f"appender_id must be in [0, 255], got {appender_id}")
-        from .batch_appender import MmapqIndexedBatchAppender
+        from .batch_appender import IndexedBatchAppender
         ptr = ffi.new("MmapqIndexedBatchAppender **")
         rc = lib.mmapq_indexed_batch_queue_create_appender_with_id(
             self._inner, appender_id, ptr)
         check_rc(rc, "create_appender_with_id")
-        a = MmapqIndexedBatchAppender(ptr[0])
+        a = IndexedBatchAppender(ptr[0])
         a._runtime = self._runtime
         return a
 
     def create_reader(self):
         """Create a batch reader inheriting the queue's runtime."""
-        from .reader import MmapqIndexedBatchReader
+        from .reader import IndexedBatchReader
         ptr = ffi.new("MmapqIndexedBatchReader **")
         rc = lib.mmapq_indexed_batch_queue_create_reader(self._inner, ptr)
         check_rc(rc, "create_reader")
-        r = MmapqIndexedBatchReader(ptr[0], runtime=self._read_runtime or self._runtime)
+        r = IndexedBatchReader(ptr[0], runtime=self._read_runtime or self._runtime)
         return r
 
     def create_archiver(self):
         """Create a batch archiver inheriting the queue's runtime."""
-        from .archiver import MmapqIndexedBatchArchiver
+        from .archiver import IndexedBatchArchiver
         ptr = ffi.new("MmapqIndexedBatchArchiver **")
         rc = lib.mmapq_indexed_batch_queue_create_archiver(self._inner, ptr)
         check_rc(rc, "create_archiver")
-        return MmapqIndexedBatchArchiver(ptr[0])
+        return IndexedBatchArchiver(ptr[0])
 
     def close(self):
         self._finalizer.detach()

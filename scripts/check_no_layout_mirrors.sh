@@ -87,6 +87,14 @@ is_opaque_in_c() {
 main() {
     local exit_code=0
 
+    # Fail-closed: the cdef is the whole point of this gate. If setup.py is
+    # absent, `strip_comments < "$CDEF"` would read empty input and report
+    # "no mirrors found" — a vacuous pass. Hard FAIL instead (P5).
+    if [ ! -f "$CDEF" ]; then
+        echo "ERROR: check_no_layout_mirrors.sh: cdef not found at $CDEF" >&2
+        exit 1
+    fi
+
     # Read cdef, strip comments, find field-bearing structs
     while IFS= read -r struct_name; do
         if is_opaque_in_c "$struct_name"; then

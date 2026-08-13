@@ -1,8 +1,8 @@
-"""MmapqIndexedBatchPoller — sequential batch consumer.
+"""IndexedBatchPoller — sequential batch consumer.
 
 Each poll() delivers one batch. The handler receives the batch index and
 a list of message payload bytes. The handler iterates over the messages
-directly and returns a MmapqNextMove directive.
+directly and returns a NextMove directive.
 
 Note: messages are fully materialized into Python bytes before the handler
 runs. For batches with thousands of large payloads, this doubles memory
@@ -20,7 +20,7 @@ from ._cdata import require_cdata
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
-from .types import MmapqNextMove, MmapqPollResult
+from .types import NextMove, PollResult
 from ._errors import QueueCorruptError, check_rc
 
 
@@ -49,29 +49,29 @@ def _destroy_batch_poller(inner):
 
 
 @ffi.callback("MmapqNextMove(int64_t, MmapqBatchReadingContext*, void*)",
-              error=MmapqNextMove.STOP)
+              error=NextMove.STOP)
 def _c_trampoline(batch_index, ctx_ptr, user_data):
     """Called from C — dispatches to the poller's current handler."""
     poller = ffi.from_handle(user_data)
     handler = poller._current_handler
     if handler is None:
-        return MmapqNextMove.STOP
+        return NextMove.STOP
     try:
         messages = iter_batch_messages(ctx_ptr)
         return handler(batch_index, messages)
     except Exception as e:
         poller._pending_exc = e
-        return MmapqNextMove.STOP
+        return NextMove.STOP
 
 
-class MmapqIndexedBatchPoller:
+class IndexedBatchPoller:
     """Sequential batch consumer.
 
     Thread-confined. One per consumer thread.
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct MmapqIndexedBatchPoller *", "MmapqIndexedBatchPoller")
+        require_cdata(inner, "struct MmapqIndexedBatchPoller *", "IndexedBatchPoller")
         self._inner = inner
         self._runtime = None
         self._handle = ffi.new_handle(self)
@@ -84,9 +84,9 @@ class MmapqIndexedBatchPoller:
 
         The handler receives (batch_index, messages) where messages is
         a list[bytes] of the batch's payloads. The handler iterates
-        over the messages and returns a MmapqNextMove directive.
+        over the messages and returns a NextMove directive.
 
-        Returns a MmapqPollResult describing what happened.
+        Returns a PollResult describing what happened.
         Raises the handler's exception if one was raised during delivery.
         """
         self._current_handler = handler
@@ -101,11 +101,11 @@ class MmapqIndexedBatchPoller:
                 exc = self._pending_exc
                 self._pending_exc = None
                 raise exc
-            if result == MmapqPollResult.ERROR:
+            if result == PollResult.ERROR:
                 check_rc(lib.mmapq_indexed_batch_poller_last_error(self._inner), "mmapq_indexed_batch_poller_poll")
-            if result == MmapqPollResult.CORRUPT:
+            if result == PollResult.CORRUPT:
                 raise QueueCorruptError("batch poll: committed batch payload is corrupt")
-            return MmapqPollResult(result)
+            return PollResult(result)
         finally:
             self._current_handler = None
 

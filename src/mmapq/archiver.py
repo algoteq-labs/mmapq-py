@@ -1,4 +1,4 @@
-"""MmapqIndexedArchiver — manage archiving of queue entries."""
+"""IndexedArchiver — manage archiving of queue entries."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def _destroy_archiver(inner):
         lib.mmapq_indexed_archiver_close(inner)
 
 
-class MmapqIndexedArchiver:
+class IndexedArchiver:
     """Archiver for a single-message indexed queue.
 
     Advances the queue's start index so that old entries become
@@ -26,20 +26,20 @@ class MmapqIndexedArchiver:
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct MmapqIndexedArchiver *", "MmapqIndexedArchiver")
+        require_cdata(inner, "struct MmapqIndexedArchiver *", "IndexedArchiver")
         self._inner = inner
         self._finalizer = weakref.finalize(self, _destroy_archiver, inner)
 
     @classmethod
     def create(cls, directory: str, queue_name: str, *,
                ring_size: int = 4,
-               runtime=None) -> MmapqIndexedArchiver:
+               runtime=None) -> IndexedArchiver:
         """Create an archiver for the named queue.
 
         directory:   path to the queue data directory
         queue_name:  logical queue name
         ring_size:   number of simultaneously mapped regions
-        runtime:     optional MmapqRuntime for async region mapping (keyword-only)
+        runtime:     optional Runtime for async region mapping (keyword-only)
 
         The queue must have been created before archiving is possible.
         """
@@ -103,7 +103,7 @@ def _destroy_batch_archiver(inner):
         lib.mmapq_indexed_batch_archiver_close(inner)
 
 
-class MmapqIndexedBatchArchiver:
+class IndexedBatchArchiver:
     """Archiver for an indexed batch queue.
 
     Advances the queue's start index so that old batches become
@@ -112,7 +112,7 @@ class MmapqIndexedBatchArchiver:
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct MmapqIndexedBatchArchiver *", "MmapqIndexedBatchArchiver")
+        require_cdata(inner, "struct MmapqIndexedBatchArchiver *", "IndexedBatchArchiver")
         self._inner = inner
         self._finalizer = weakref.finalize(self, _destroy_batch_archiver, inner)
 

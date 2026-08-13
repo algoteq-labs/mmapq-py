@@ -1,4 +1,4 @@
-"""MmapqIndexedQueue — factory and lifecycle owner for a single-message indexed queue."""
+"""IndexedQueue — factory and lifecycle owner for a single-message indexed queue."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def _destroy_queue(inner):
         lib.mmapq_indexed_queue_close(inner)
 
 
-class MmapqIndexedQueue:
+class IndexedQueue:
     """Factory for single-message queue participants.
 
     Creates appenders and pollers on the same underlying queue.
@@ -25,7 +25,7 @@ class MmapqIndexedQueue:
     """
 
     def __init__(self, inner, *, runtime=None):
-        require_cdata(inner, "struct MmapqIndexedQueue *", "MmapqIndexedQueue")
+        require_cdata(inner, "struct MmapqIndexedQueue *", "IndexedQueue")
         self._inner = inner
         self._runtime = runtime
         self._finalizer = weakref.finalize(self, _destroy_queue, inner)
@@ -37,7 +37,7 @@ class MmapqIndexedQueue:
 
         directory:   path to the queue data directory
         queue_name:  logical queue name
-        runtime:     optional MmapqRuntime for async region mapping (keyword-only)
+        runtime:     optional Runtime for async region mapping (keyword-only)
         archivable:  if True, create archivable (default False)
         """
         wr = write_runtime._inner if write_runtime is not None and write_runtime._inner is not None else ffi.NULL
@@ -60,11 +60,11 @@ class MmapqIndexedQueue:
 
     def create_appender(self):
         """Create a single-message appender."""
-        from .single_appender import MmapqIndexedAppender
+        from .single_appender import IndexedAppender
         ptr = ffi.new("MmapqIndexedAppender **")
         rc = lib.mmapq_indexed_queue_create_appender(self._inner, ptr)
         check_rc(rc, "create_appender")
-        a = MmapqIndexedAppender(ptr[0])
+        a = IndexedAppender(ptr[0])
         a._runtime = self._runtime
         return a
 
@@ -77,41 +77,41 @@ class MmapqIndexedQueue:
         if not 0 <= appender_id < 256:
             raise ValueError(
                 f"appender_id must be in [0, 255], got {appender_id}")
-        from .single_appender import MmapqIndexedAppender
+        from .single_appender import IndexedAppender
         ptr = ffi.new("MmapqIndexedAppender **")
         rc = lib.mmapq_indexed_queue_create_appender_with_id(
             self._inner, appender_id, ptr)
         check_rc(rc, "create_appender_with_id")
-        a = MmapqIndexedAppender(ptr[0])
+        a = IndexedAppender(ptr[0])
         a._runtime = self._runtime
         return a
 
     def create_poller(self):
         """Create a single-message poller."""
-        from .single_poller import MmapqIndexedPoller
+        from .single_poller import IndexedPoller
         ptr = ffi.new("MmapqIndexedPoller **")
         rc = lib.mmapq_indexed_queue_create_poller(self._inner, ptr)
         check_rc(rc, "create_poller")
-        p = MmapqIndexedPoller(ptr[0])
+        p = IndexedPoller(ptr[0])
         p._runtime = self._runtime
         return p
 
     def create_reader(self):
         """Create a random-access reader inheriting the queue's runtime."""
-        from .reader import MmapqIndexedReader
+        from .reader import IndexedReader
         ptr = ffi.new("MmapqIndexedReader **")
         rc = lib.mmapq_indexed_queue_create_reader(self._inner, ptr)
         check_rc(rc, "create_reader")
-        r = MmapqIndexedReader(ptr[0], runtime=self._read_runtime or self._runtime)
+        r = IndexedReader(ptr[0], runtime=self._read_runtime or self._runtime)
         return r
 
     def create_archiver(self):
         """Create an archiver inheriting the queue's runtime."""
-        from .archiver import MmapqIndexedArchiver
+        from .archiver import IndexedArchiver
         ptr = ffi.new("MmapqIndexedArchiver **")
         rc = lib.mmapq_indexed_queue_create_archiver(self._inner, ptr)
         check_rc(rc, "create_archiver")
-        return MmapqIndexedArchiver(ptr[0])
+        return IndexedArchiver(ptr[0])
 
     def close(self):
         self._finalizer.detach()

@@ -1,4 +1,4 @@
-"""MmapqIndexedBatchAppender — producer-side batch writer."""
+"""IndexedBatchAppender — producer-side batch writer."""
 
 from __future__ import annotations
 
@@ -83,14 +83,14 @@ class BatchWriter:
         return False
 
 
-class MmapqIndexedBatchAppender:
+class IndexedBatchAppender:
     """Batch appender.
 
     Thread-confined. One per producer lane.
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct MmapqIndexedBatchAppender *", "MmapqIndexedBatchAppender")
+        require_cdata(inner, "struct MmapqIndexedBatchAppender *", "IndexedBatchAppender")
         self._inner = inner
         self._runtime = None
         self._finalizer = weakref.finalize(self, _destroy_batch_appender, inner)

@@ -9,7 +9,7 @@ import os
 import sys
 import struct
 
-from mmapq import MmapqIndexedBatchQueue, MmapqNextMove
+from mmapq import IndexedBatchQueue, NextMove
 
 SHUTDOWN_SEQ = 0
 LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence
@@ -46,8 +46,8 @@ def main():
         pin_thread(cpu_core)
         print(f"  Core: {cpu_core}")
 
-    q_req = MmapqIndexedBatchQueue.create(directory, req_name)
-    q_res = MmapqIndexedBatchQueue.create(directory, res_name)
+    q_req = IndexedBatchQueue.create(directory, req_name)
+    q_res = IndexedBatchQueue.create(directory, res_name)
     poller = q_req.create_poller()
     appender = q_res.create_appender()
 
@@ -57,7 +57,7 @@ def main():
         nonlocal shutdown
 
         if not messages:
-            return MmapqNextMove.ADVANCE
+            return NextMove.ADVANCE
 
         msg0 = messages[0]
         if len(msg0) >= 6:
@@ -71,7 +71,7 @@ def main():
                 writer.append(msg)
             writer.commit()
 
-        return MmapqNextMove.ADVANCE
+        return NextMove.ADVANCE
 
     print(f"Batch Echo Server started ({'SYNC' if use_sync else 'ASYNC'})...")
     print(f"  Queues: {directory}/{req_name} -> {directory}/{res_name}")

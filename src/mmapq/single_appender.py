@@ -1,4 +1,4 @@
-"""MmapqIndexedAppender — single-message producer."""
+"""IndexedAppender — single-message producer."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def _destroy_appender(inner):
         lib.mmapq_indexed_appender_close(inner)
 
 
-class MmapqIndexedAppender:
+class IndexedAppender:
     """Single-message appender.
 
     Appends individual messages to the queue. Each append commits atomically.
@@ -25,7 +25,7 @@ class MmapqIndexedAppender:
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct MmapqIndexedAppender *", "MmapqIndexedAppender")
+        require_cdata(inner, "struct MmapqIndexedAppender *", "IndexedAppender")
         self._inner = inner
         self._runtime = None
         self._finalizer = weakref.finalize(self, _destroy_appender, inner)

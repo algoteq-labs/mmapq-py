@@ -1,7 +1,7 @@
-"""MmapqIndexedPoller — sequential single-message consumer.
+"""IndexedPoller — sequential single-message consumer.
 
 Each poll() delivers one message. The handler receives the index, appender_id,
-and message data as bytes, then returns a MmapqNextMove directive.
+and message data as bytes, then returns a NextMove directive.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from ._cdata import require_cdata
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
-from .types import MmapqNextMove, MmapqPollResult
+from .types import NextMove, PollResult
 from ._errors import QueueCorruptError, check_rc
 
 
@@ -23,29 +23,29 @@ def _destroy_poller(inner):
 
 
 @ffi.callback("MmapqNextMove(int64_t, uint8_t, const void*, int32_t, void*)",
-              error=MmapqNextMove.STOP)
+              error=NextMove.STOP)
 def _c_trampoline(index, appender_id, data_ptr, length, user_data):
     """Called from C — dispatches to the poller's current handler."""
     poller = ffi.from_handle(user_data)
     handler = poller._current_handler
     if handler is None:
-        return MmapqNextMove.STOP
+        return NextMove.STOP
     try:
         data = bytes(ffi.buffer(data_ptr, length))
         return handler(index, appender_id, data)
     except Exception as e:
         poller._pending_exc = e
-        return MmapqNextMove.STOP
+        return NextMove.STOP
 
 
-class MmapqIndexedPoller:
+class IndexedPoller:
     """Sequential single-message consumer.
 
     Thread-confined. One per consumer thread.
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct MmapqIndexedPoller *", "MmapqIndexedPoller")
+        require_cdata(inner, "struct MmapqIndexedPoller *", "IndexedPoller")
         self._inner = inner
         self._runtime = None
         self._handle = ffi.new_handle(self)
@@ -57,9 +57,9 @@ class MmapqIndexedPoller:
         """Poll for the next message, delivering it to the handler.
 
         The handler receives (index: int, appender_id: int, data: bytes)
-        and must return a MmapqNextMove directive.
+        and must return a NextMove directive.
 
-        Returns a MmapqPollResult describing what happened.
+        Returns a PollResult describing what happened.
         Raises the handler's exception if one was raised during delivery.
         """
         self._current_handler = handler
@@ -74,11 +74,11 @@ class MmapqIndexedPoller:
                 exc = self._pending_exc
                 self._pending_exc = None
                 raise exc
-            if result == MmapqPollResult.ERROR:
+            if result == PollResult.ERROR:
                 check_rc(lib.mmapq_indexed_poller_last_error(self._inner), "mmapq_indexed_poller_poll")
-            if result == MmapqPollResult.CORRUPT:
+            if result == PollResult.CORRUPT:
                 raise QueueCorruptError("poll: committed payload data is corrupt")
-            return MmapqPollResult(result)
+            return PollResult(result)
         finally:
             self._current_handler = None
 

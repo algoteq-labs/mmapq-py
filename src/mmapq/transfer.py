@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from . import _cffi as _cffi_mod
-from .reader import MmapqIndexedReader, MmapqIndexedBatchReader
+from .reader import IndexedReader, IndexedBatchReader
 from ._errors import check_rc
-from .types import MmapqConflictBehavior
+from .types import ConflictBehavior
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -35,8 +35,8 @@ def _mapper_trampoline(source_aid: int, ctx) -> int:
 
 
 def _validate_conflict(on_conflict):
-    if on_conflict not in (MmapqConflictBehavior.AUTO, MmapqConflictBehavior.ABORT):
-        raise ValueError(f"invalid MmapqConflictBehavior: {on_conflict}")
+    if on_conflict not in (ConflictBehavior.AUTO, ConflictBehavior.ABORT):
+        raise ValueError(f"invalid ConflictBehavior: {on_conflict}")
 
 
 def _setup_mapper(mapper):
@@ -68,7 +68,7 @@ def export_queue(directory: str, queue_name: str, dest_path: str, *,
     Raises:
         OSError: cannot open destination file for writing.
     """
-    reader = MmapqIndexedReader.create(directory, queue_name)
+    reader = IndexedReader.create(directory, queue_name)
     try:
         if to_index is None:
             to_index = reader.last_index()
@@ -95,7 +95,7 @@ def import_queue(src_path: str, directory: str,
                  allow_append: bool = False,
                  preserve: bool = False,
                  mapper: Optional[Callable[[int], int]] = None,
-                 on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+                 on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """Import entries from a flat stream file into a queue.
 
     Start index is determined automatically:
@@ -108,8 +108,8 @@ def import_queue(src_path: str, directory: str,
                 Pass None (the parameter value) for identity mapping.
                 **Note: if this function raises, the transfer
                 continues with auto-assigned IDs.**
-        on_conflict: ``MmapqConflictBehavior.AUTO`` (default) or
-                     ``MmapqConflictBehavior.ABORT``.
+        on_conflict: ``ConflictBehavior.AUTO`` (default) or
+                     ``ConflictBehavior.ABORT``.
 
     Raises:
         OSError: cannot open source file for reading.
@@ -140,7 +140,7 @@ def import_batch_stream(src_path: str, directory: str,
                          allow_append: bool = False,
                          preserve: bool = False,
                          mapper: Optional[Callable[[int], int]] = None,
-                         on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+                         on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
     Note: if the mapper raises, the transfer continues with
     auto-assigned appender IDs.
@@ -184,7 +184,7 @@ def export_batch_queue(directory: str, queue_name: str, dest_path: str, *,
     Raises:
         OSError: cannot open destination file for writing.
     """
-    reader = MmapqIndexedBatchReader.create(directory, queue_name)
+    reader = IndexedBatchReader.create(directory, queue_name)
     try:
         if to_index is None:
             to_index = reader.last_index()
@@ -211,7 +211,7 @@ def import_batch_queue(src_path: str, directory: str,
                         allow_append: bool = False,
                         preserve: bool = False,
                         mapper: Optional[Callable[[int], int]] = None,
-                        on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+                        on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
     Note: if the mapper raises, the transfer continues with
     auto-assigned appender IDs.
@@ -250,7 +250,7 @@ def import_flat_to_batch(src_path: str, directory: str,
                            allow_append: bool = False,
                            preserve: bool = False,
                            mapper: Optional[Callable[[int], int]] = None,
-                           on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+                           on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
     Note: if the mapper raises, the transfer continues with
     auto-assigned appender IDs.
@@ -289,7 +289,7 @@ def copy_queue(src_dir: str, src_name: str,
                allow_append: bool = False,
                preserve: bool = False,
                mapper: Optional[Callable[[int], int]] = None,
-               on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+               on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
     Note: if the mapper raises, the transfer continues with
     auto-assigned appender IDs.
@@ -305,7 +305,7 @@ def copy_queue(src_dir: str, src_name: str,
     """
     _check_no_preserve_append(preserve, allow_append)
     _validate_conflict(on_conflict)
-    reader = MmapqIndexedReader.create(src_dir, src_name)
+    reader = IndexedReader.create(src_dir, src_name)
     try:
         last = reader.last_index()
         if last < 0:
@@ -330,7 +330,7 @@ def copy_batch_queue(src_dir: str, src_name: str,
                      allow_append: bool = False,
                      preserve: bool = False,
                      mapper: Optional[Callable[[int], int]] = None,
-                     on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+                     on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
     Note: if the mapper raises, the transfer continues with
     auto-assigned appender IDs.
@@ -346,7 +346,7 @@ def copy_batch_queue(src_dir: str, src_name: str,
     """
     _check_no_preserve_append(preserve, allow_append)
     _validate_conflict(on_conflict)
-    reader = MmapqIndexedBatchReader.create(src_dir, src_name)
+    reader = IndexedBatchReader.create(src_dir, src_name)
     try:
         last = reader.last_index()
         if last < 0:
@@ -371,7 +371,7 @@ def copy_normal_to_batch(src_dir: str, src_name: str,
                          allow_append: bool = False,
                          preserve: bool = False,
                          mapper: Optional[Callable[[int], int]] = None,
-                         on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+                         on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
     Note: if the mapper raises, the transfer continues with
     auto-assigned appender IDs.
@@ -387,7 +387,7 @@ def copy_normal_to_batch(src_dir: str, src_name: str,
     """
     _check_no_preserve_append(preserve, allow_append)
     _validate_conflict(on_conflict)
-    reader = MmapqIndexedReader.create(src_dir, src_name)
+    reader = IndexedReader.create(src_dir, src_name)
     try:
         last = reader.last_index()
         if last < 0:
@@ -412,7 +412,7 @@ def copy_batch_to_normal(src_dir: str, src_name: str,
                          allow_append: bool = False,
                          preserve: bool = False,
                          mapper: Optional[Callable[[int], int]] = None,
-                         on_conflict: MmapqConflictBehavior = MmapqConflictBehavior.AUTO) -> int:
+                         on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
     Note: if the mapper raises, the transfer continues with
     auto-assigned appender IDs.
@@ -429,7 +429,7 @@ def copy_batch_to_normal(src_dir: str, src_name: str,
     """
     _check_no_preserve_append(preserve, allow_append)
     _validate_conflict(on_conflict)
-    reader = MmapqIndexedBatchReader.create(src_dir, src_name)
+    reader = IndexedBatchReader.create(src_dir, src_name)
     try:
         last = reader.last_index()
         if last < 0:

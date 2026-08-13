@@ -14,7 +14,7 @@ import os
 import sys
 import shutil
 
-from mmapq import MmapqIndexedQueue, MmapqIndexedReader, MmapqNextMove
+from mmapq import IndexedQueue, IndexedReader, NextMove
 
 
 def main():
@@ -31,7 +31,7 @@ def main():
         shutil.rmtree(queue_path)
 
     # Create queue, appender, and poller
-    q = MmapqIndexedQueue.create(directory, queue_name)
+    q = IndexedQueue.create(directory, queue_name)
     appender = q.create_appender()
     poller = q.create_poller()
 
@@ -49,14 +49,14 @@ def main():
     def handler(_index, _appender_id, data):
         messages.append(data)
         print(f"  received: {data!r}")
-        return MmapqNextMove.ADVANCE
+        return NextMove.ADVANCE
 
     for _ in range(count):
         poller.poll(handler)
 
     # Verify via random-access reader
     print("\nVerifying via random-access reader...")
-    reader = MmapqIndexedReader.create(directory, queue_name)
+    reader = IndexedReader.create(directory, queue_name)
     for i in range(count):
         data = reader.read(i)
         expected = f"msg-{i}".encode()

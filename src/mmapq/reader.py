@@ -1,4 +1,4 @@
-"""MmapqIndexedReader and MmapqIndexedBatchReader — random access readers."""
+"""IndexedReader and IndexedBatchReader — random access readers."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def _destroy_batch_reader(inner):
         lib.mmapq_indexed_batch_reader_close(inner)
 
 
-class MmapqEntryStatus(enum.IntEnum):
+class EntryStatus(enum.IntEnum):
     """Availability of a queue entry at a given index."""
 
     AVAILABLE = 0
@@ -37,7 +37,7 @@ class MmapqEntryStatus(enum.IntEnum):
     """A mapping timeout or I/O error occurred."""
 
 
-class MmapqIndexedReader:
+class IndexedReader:
     """Random-access reader for a single-message indexed queue.
 
     Reads any committed entry by index without advancing a cursor.
@@ -45,7 +45,7 @@ class MmapqIndexedReader:
     """
 
     def __init__(self, inner, *, runtime=None):
-        require_cdata(inner, "struct MmapqIndexedReader *", "MmapqIndexedReader")
+        require_cdata(inner, "struct MmapqIndexedReader *", "IndexedReader")
         self._inner = inner
         self._runtime = runtime
         self._ctx = ffi.new("MmapqReadingContext *")
@@ -56,7 +56,7 @@ class MmapqIndexedReader:
     def create(cls, directory: str, queue_name: str, *,
                ring_size: int = 4,
                timeout_ns: int = 10000000000,
-               runtime=None) -> MmapqIndexedReader:
+               runtime=None) -> IndexedReader:
         """Create or open a random-access reader.
 
         directory:   path to the queue data directory
@@ -113,13 +113,13 @@ class MmapqIndexedReader:
         self._check_open()
         lib.mmapq_indexed_reader_read(self._inner, index, self._ctx)
         self._check_status()
-        if self._ctx.status == MmapqEntryStatus.AVAILABLE:
+        if self._ctx.status == EntryStatus.AVAILABLE:
             self._last_read_valid = True
             return memoryview(ffi.buffer(self._ctx.data, self._ctx.length))
         self._last_read_valid = False
         return None
 
-    def entry_status(self, index: int) -> MmapqEntryStatus:
+    def entry_status(self, index: int) -> EntryStatus:
         """Check availability of the entry at the given index.
 
         Lightweight check that does not populate a MmapqReadingContext.
@@ -127,7 +127,7 @@ class MmapqIndexedReader:
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
-        return MmapqEntryStatus(lib.mmapq_indexed_reader_entry_status(self._inner, index))
+        return EntryStatus(lib.mmapq_indexed_reader_entry_status(self._inner, index))
 
     def last_index(self) -> int:
         """Highest committed index, or -1 if the queue is empty."""
@@ -149,17 +149,17 @@ class MmapqIndexedReader:
 
     def _check_open(self):
         if self._inner is None:
-            raise QueueClosedError("MmapqIndexedReader is closed")
+            raise QueueClosedError("IndexedReader is closed")
 
     def _check_status(self):
         status = self._ctx.status
-        if status == MmapqEntryStatus.END_OF_STREAM:
+        if status == EntryStatus.END_OF_STREAM:
             return
-        if status == MmapqEntryStatus.ARCHIVED:
+        if status == EntryStatus.ARCHIVED:
             return
-        if status == MmapqEntryStatus.AVAILABLE:
+        if status == EntryStatus.AVAILABLE:
             return
-        if status == MmapqEntryStatus.ERROR:
+        if status == EntryStatus.ERROR:
             rc = lib.mmapq_indexed_reader_last_error(self._inner)
             if rc != 0:
                 check_rc(rc, "mmapq_indexed_reader_read")
@@ -186,7 +186,7 @@ class MmapqIndexedReader:
 
     def _extract(self) -> Optional[bytes]:
         self._check_status()
-        if self._ctx.status == MmapqEntryStatus.AVAILABLE:
+        if self._ctx.status == EntryStatus.AVAILABLE:
             self._last_read_valid = True
             return bytes(ffi.buffer(self._ctx.data, self._ctx.length))
         self._last_read_valid = False
@@ -200,7 +200,7 @@ class MmapqIndexedReader:
         return False
 
 
-class MmapqIndexedBatchReader:
+class IndexedBatchReader:
     """Random-access reader for an indexed batch queue.
 
     Reads any committed batch by index. Each read() returns a list of
@@ -209,7 +209,7 @@ class MmapqIndexedBatchReader:
     """
 
     def __init__(self, inner, *, runtime=None):
-        require_cdata(inner, "struct MmapqIndexedBatchReader *", "MmapqIndexedBatchReader")
+        require_cdata(inner, "struct MmapqIndexedBatchReader *", "IndexedBatchReader")
         self._inner = inner
         self._runtime = runtime
         self._ctx = ffi.new("MmapqBatchReadingContext *")
@@ -220,14 +220,14 @@ class MmapqIndexedBatchReader:
     def create(cls, directory: str, queue_name: str, *,
                ring_size: int = 4,
                timeout_ns: int = 10000000000,
-               runtime=None) -> MmapqIndexedBatchReader:
+               runtime=None) -> IndexedBatchReader:
         """Create or open a batch reader.
 
         directory:   path to the queue data directory
         queue_name:  logical queue name
         ring_size:   number of simultaneously mapped regions
         timeout_ns:  region-mapping timeout in nanoseconds
-        runtime:     optional MmapqRuntime for async region mapping (keyword-only)
+        runtime:     optional Runtime for async region mapping (keyword-only)
         """
         rt = runtime._inner if runtime is not None else ffi.NULL
         ptr = ffi.new("MmapqIndexedBatchReader **")
@@ -264,7 +264,7 @@ class MmapqIndexedBatchReader:
     def entry_status(self, index: int) -> int:
         """Check availability of the batch at the given index.
 
-        Returns a MmapqBatchEntryStatus value.
+        Returns a BatchEntryStatus value.
         """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
@@ -308,21 +308,21 @@ class MmapqIndexedBatchReader:
 
     def _check_open(self):
         if self._inner is None:
-            raise QueueClosedError("MmapqIndexedBatchReader is closed")
+            raise QueueClosedError("IndexedBatchReader is closed")
 
     def _extract_batch(self) -> Optional[list[bytes]]:
-        from .types import MmapqBatchEntryStatus
+        from .types import BatchEntryStatus
         from .batch_poller import iter_batch_messages
         status = self._ctx.status
-        if status == MmapqBatchEntryStatus.AVAILABLE:
+        if status == BatchEntryStatus.AVAILABLE:
             self._last_read_valid = True
             return iter_batch_messages(self._ctx)
         else:
             self._last_read_valid = False
-        if status in (MmapqBatchEntryStatus.END_OF_STREAM,
-                      MmapqBatchEntryStatus.ARCHIVED):
+        if status in (BatchEntryStatus.END_OF_STREAM,
+                      BatchEntryStatus.ARCHIVED):
             return None
-        if status == MmapqBatchEntryStatus.ERROR:
+        if status == BatchEntryStatus.ERROR:
             rc = lib.mmapq_indexed_batch_reader_last_error(self._inner)
             if rc != 0:
                 check_rc(rc, "mmapq_indexed_batch_reader_read")

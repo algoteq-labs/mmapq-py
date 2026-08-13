@@ -19,7 +19,7 @@ import threading
 import time
 import struct
 
-from mmapq import MmapqIndexedBatchQueue, MmapqNextMove, MmapqPollResult
+from mmapq import IndexedBatchQueue, NextMove, PollResult
 
 SHUTDOWN_SEQ = 0
 LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence
@@ -86,8 +86,8 @@ class BatchLatencyProbe:
         self.current_seq = 0
         self.response_received = False
 
-        q_req = MmapqIndexedBatchQueue.create(directory, request_name)
-        q_res = MmapqIndexedBatchQueue.create(directory, response_name)
+        q_req = IndexedBatchQueue.create(directory, request_name)
+        q_res = IndexedBatchQueue.create(directory, response_name)
         self.request_appender = q_req.create_appender()
         self.response_poller = q_res.create_poller()
         self.response_poller.move_to_end()
@@ -117,7 +117,7 @@ class BatchLatencyProbe:
                 (rid, rseq) = struct.unpack(LATENCY_HEADER_FMT, messages[0][:6])
                 if rid == my_id and rseq == my_seq:
                     self.response_received = True
-            return MmapqNextMove.ADVANCE
+            return NextMove.ADVANCE
 
         while not self.response_received:
             self.response_poller.poll(response_handler)
@@ -150,7 +150,7 @@ class BatchLatencyProbe:
                 (_, rseq) = struct.unpack(LATENCY_HEADER_FMT, messages[0][:6])
                 if rseq == SHUTDOWN_SEQ:
                     self.response_received = True
-            return MmapqNextMove.ADVANCE
+            return NextMove.ADVANCE
 
         while not self.response_received and mmapq_monotonic_nanos() < timeout_at:
             self.response_poller.poll(shutdown_handler)
@@ -166,8 +166,8 @@ def internal_server(directory,
     if server_cpu >= 0:
         _pin_thread(server_cpu)
 
-    q_req = MmapqIndexedBatchQueue.create(directory, request_name)
-    q_res = MmapqIndexedBatchQueue.create(directory, response_name)
+    q_req = IndexedBatchQueue.create(directory, request_name)
+    q_res = IndexedBatchQueue.create(directory, response_name)
     poller = q_req.create_poller()
     appender = q_res.create_appender()
 
@@ -176,7 +176,7 @@ def internal_server(directory,
     def echo_handler(batch_index, messages):
         nonlocal shutdown
         if not messages:
-            return MmapqNextMove.ADVANCE
+            return NextMove.ADVANCE
 
         first = messages[0]
         if len(first) >= 6:
@@ -189,11 +189,11 @@ def internal_server(directory,
                 writer.append(msg)
             writer.commit()
 
-        return MmapqNextMove.ADVANCE
+        return NextMove.ADVANCE
 
     while not shutdown:
         result = poller.poll(echo_handler)
-        if result == MmapqPollResult.END_OF_STREAM:
+        if result == PollResult.END_OF_STREAM:
             # Spin briefly when empty
             pass
 

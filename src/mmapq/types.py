@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 
 
-class MmapqNextMove(enum.IntEnum):
+class NextMove(enum.IntEnum):
     """Direction returned by the batch handler to control cursor movement."""
 
     ADVANCE = 0
@@ -16,7 +16,7 @@ class MmapqNextMove(enum.IntEnum):
     """Move cursor backward to the previous batch."""
 
 
-class MmapqPollResult(enum.IntEnum):
+class PollResult(enum.IntEnum):
     """Result of a single poll() call."""
 
     END_OF_STREAM = 0
@@ -35,11 +35,11 @@ class MmapqPollResult(enum.IntEnum):
     """Committed payload data is corrupt."""
 
 
-# Alias matching C's `typedef MmapqPollResult BatchPollResult`.
-BatchPollResult = MmapqPollResult
+# Alias matching C's `typedef PollResult BatchPollResult`.
+BatchPollResult = PollResult
 
 
-class MmapqBatchEntryStatus(enum.IntEnum):
+class BatchEntryStatus(enum.IntEnum):
     """Availability of a batch entry at a given index."""
 
     AVAILABLE = 0
@@ -52,7 +52,7 @@ class MmapqBatchEntryStatus(enum.IntEnum):
     """A mapping timeout or I/O error occurred."""
 
 
-class MmapqConflictBehavior(enum.IntEnum):
+class ConflictBehavior(enum.IntEnum):
     """What to do when a mapped appender ID is already in use."""
 
     AUTO = 0

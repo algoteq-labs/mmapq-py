@@ -142,7 +142,7 @@ if [ "${1:-}" = "--self-test" ]; then
 
     # Positive: correct tree must exit 0
     HAD_ERROR=0
-    check_enum "$C_INCLUDE/poller.h" "PollResult" "POLL_" "PollResult" "src/mmapq/types.py"
+    check_enum "$C_INCLUDE/poller.h" "MmapqPollResult" "MMAPQ_POLL_" "PollResult" "src/mmapq/types.py"
     if [ "$HAD_ERROR" -ne 0 ]; then
         echo "SELF-TEST FAILED: correct tree reported mismatch"
         exit 1
@@ -162,7 +162,7 @@ class PollResult(enum.IntEnum):
     CORRUPT = 99
 TESTEOF
     HAD_ERROR=0
-    check_enum "$C_INCLUDE/poller.h" "PollResult" "POLL_" "PollResult" "$TMP/types.py"
+    check_enum "$C_INCLUDE/poller.h" "MmapqPollResult" "MMAPQ_POLL_" "PollResult" "$TMP/types.py"
     if [ "$HAD_ERROR" -eq 0 ]; then
         echo "SELF-TEST FAILED: value mismatch not detected"
         exit 1
@@ -201,10 +201,10 @@ fi
 
 # ── Enum mapping table ────────────────────────────────────────────────────
 # Format: header_path  C_type_name  C_prefix  Python_class  types_py_path
-check_enum "$C_INCLUDE/poller.h"                "NextMove"          "NEXT_"         "NextMove"         "$TYPES_PY"
-check_enum "$C_INCLUDE/poller.h"                "PollResult"        "POLL_"         "PollResult"       "$TYPES_PY"
-check_enum "$C_INCLUDE/indexed_batch_reader.h"  "BatchEntryStatus"  "BATCH_ENTRY_"  "BatchEntryStatus" "$TYPES_PY"
-check_enum "$C_INCLUDE/queue_transfer.h"        "ConflictBehavior"  "CONFLICT_"     "ConflictBehavior" "$TYPES_PY"
+check_enum "$C_INCLUDE/poller.h"                "MmapqNextMove"         "MMAPQ_NEXT_"         "NextMove"         "$TYPES_PY"
+check_enum "$C_INCLUDE/poller.h"                "MmapqPollResult"       "MMAPQ_POLL_"         "PollResult"       "$TYPES_PY"
+check_enum "$C_INCLUDE/indexed_batch_reader.h"  "MmapqBatchEntryStatus" "MMAPQ_BATCH_ENTRY_"  "BatchEntryStatus" "$TYPES_PY"
+check_enum "$C_INCLUDE/queue_transfer.h"        "MmapqConflictBehavior" "MMAPQ_CONFLICT_"     "ConflictBehavior" "$TYPES_PY"
 
 if [ "$HAD_ERROR" -ne 0 ]; then
     echo "FAIL: enum sync check found mismatches"
