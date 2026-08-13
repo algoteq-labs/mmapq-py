@@ -36,9 +36,15 @@ from mmapq import (
     copy_normal_to_batch,
     copy_batch_to_normal,
     check_rc,
-    ffi,
-    lib,
+    unsafe_ffi,
+    unsafe_lib,
 )
+
+# Raw C symbols used by the low-level tests below. The public module-level
+# ffi/lib were removed in 19f; tests that need raw access go through the
+# documented escape hatches.
+ffi = unsafe_ffi()
+lib = unsafe_lib()
 
 
 class TestBatchQueue(unittest.TestCase):

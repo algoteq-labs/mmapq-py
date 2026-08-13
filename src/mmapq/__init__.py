@@ -2,9 +2,31 @@
 
 from . import _cffi as _cffi_mod
 
-# Expose ffi and lib for advanced use (iterator access, etc.)
-ffi = _cffi_mod.ffi
-lib = _cffi_mod.lib
+# The raw cffi FFI and lib objects are private. Every C symbol reachable
+# through them has no argument checking — one bad call segfaults the
+# interpreter. Use the high-level API instead; reach the raw objects only
+# through unsafe_ffi()/unsafe_lib() when you explicitly need them.
+_ffi = _cffi_mod.ffi
+_lib = _cffi_mod.lib
+
+
+def unsafe_ffi():
+    """Return the raw cffi ``FFI`` object.
+
+    Unsafe: calling C symbols directly bypasses mmapq's validation, and a
+    bad call can crash the interpreter. Prefer the high-level API. This is
+    the escape hatch for advanced/low-level use (e.g. iterator access).
+    """
+    return _ffi
+
+
+def unsafe_lib():
+    """Return the raw cffi ``lib`` object (the loaded C library).
+
+    Unsafe: same caveats as ``unsafe_ffi()``. Prefer the high-level API.
+    """
+    return _lib
+
 
 from ._errors import (
     MmapqError,
@@ -78,4 +100,6 @@ __all__ = [
     "AppenderIdConflictError",
     "MmapOutOfMemoryError",
     "check_rc",
+    "unsafe_ffi",
+    "unsafe_lib",
 ]

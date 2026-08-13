@@ -91,6 +91,18 @@ a transient timeout) rather than returning silently. Every wrapper object
 supports explicit `close()`, is a context manager, and is finalized safely
 at interpreter shutdown.
 
+The raw cffi `FFI`/`lib` objects are deliberately **not** exported as
+`mmapq.ffi` / `mmapq.lib`. Every C symbol reachable through them has no
+argument checking — one bad call segfaults the interpreter. If you need
+low-level access (e.g. iterator access), reach the raw objects only through
+the documented escape hatches, and only when you know what you are doing:
+
+```python
+from mmapq import unsafe_ffi, unsafe_lib
+ffi = unsafe_ffi()   # cffi FFI object
+lib = unsafe_lib()   # loaded C library
+```
+
 ## Installation
 
 ```bash
