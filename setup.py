@@ -293,7 +293,10 @@ ffi.cdef("""
     int  mmapq_indexed_batch_archiver_archivable_files(MmapqIndexedBatchArchiver*, char**, int);
     int64_t mmapq_indexed_batch_archiver_start_index(MmapqIndexedBatchArchiver*);
     int  mmapq_indexed_batch_archiver_start_offset(MmapqIndexedBatchArchiver*, uint8_t, int64_t*);
-    void mmapq_indexed_batch_archiver_close(MmapqIndexedBatchArchiver*);
+     void mmapq_indexed_batch_archiver_close(MmapqIndexedBatchArchiver*);
+
+     /* ── Error codes (mmap_platform.h) ─────────────────────────────────────── */
+     const char* mmapq_strerror(int rc);
 """)
 
 # ── C source files ─────────────────────────────────────────────────────────
@@ -364,7 +367,6 @@ setup(
     name="mmapq",
     version="0.1.0",
     description="Python bindings for mmapq — low-latency memory-mapped queue",
-    license="BSD 2-Clause",
     packages=["mmapq"],
     package_dir={"": "src"},
     ext_modules=[ffi.distutils_extension()],

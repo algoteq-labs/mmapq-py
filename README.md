@@ -103,6 +103,28 @@ ffi = unsafe_ffi()   # cffi FFI object
 lib = unsafe_lib()   # loaded C library
 ```
 
+## Error messages
+
+Exception messages are the single source of truth in the C library
+(`src/mmapq_strerror.c`): the Python layer maps return codes to exception
+*types* only (e.g. `QueueCorruptError`), and the message text comes from
+`mmapq_strerror` via cffi. This guarantees the text in Python matches C
+by construction and never drifts independently.
+
+| Return code | Exception type |
+|---|---:|
+| `MMAPQ_ETIMEDOUT` (-1) | `MmapqError` |
+| `MMAPQ_EINVAL` (-2) | `ValueError` |
+| `MMAPQ_ECLOSED` (-3) | `QueueClosedError` |
+| `MMAPQ_ECORRUPT` (-4) | `QueueCorruptError` |
+| `MMAPQ_ESCHEMA` (-5) | `SchemaMismatchError` |
+| `MMAPQ_EEXIST` (-6) | `QueueExistsError` |
+| `MMAPQ_ENOENT` (-7) | `FileNotFoundError` |
+| `MMAPQ_EIDCONFLICT` (-8) | `AppenderIdConflictError` |
+| `MMAPQ_ENOMEM` (-9) | `MmapOutOfMemoryError` |
+| `MMAPQ_EIO` (-10) | `MmapqError` |
+| `MMAPQ_ENOTREADY` (-11) | `MmapqError` |
+
 ## Installation
 
 ```bash
