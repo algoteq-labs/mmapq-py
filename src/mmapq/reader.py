@@ -1,4 +1,4 @@
-"""IndexedReader and IndexedBatchReader — random access readers."""
+"""MmapqIndexedReader and MmapqIndexedBatchReader — random access readers."""
 
 from __future__ import annotations
 
@@ -16,15 +16,15 @@ lib = _cffi_mod.lib
 
 def _destroy_reader(inner):
     if inner is not None:
-        lib.indexed_reader_close(inner)
+        lib.mmapq_indexed_reader_close(inner)
 
 
 def _destroy_batch_reader(inner):
     if inner is not None:
-        lib.indexed_batch_reader_close(inner)
+        lib.mmapq_indexed_batch_reader_close(inner)
 
 
-class EntryStatus(enum.IntEnum):
+class MmapqEntryStatus(enum.IntEnum):
     """Availability of a queue entry at a given index."""
 
     AVAILABLE = 0
@@ -37,7 +37,7 @@ class EntryStatus(enum.IntEnum):
     """A mapping timeout or I/O error occurred."""
 
 
-class IndexedReader:
+class MmapqIndexedReader:
     """Random-access reader for a single-message indexed queue.
 
     Reads any committed entry by index without advancing a cursor.
@@ -45,10 +45,10 @@ class IndexedReader:
     """
 
     def __init__(self, inner, *, runtime=None):
-        require_cdata(inner, "struct IndexedReader *", "IndexedReader")
+        require_cdata(inner, "struct MmapqIndexedReader *", "MmapqIndexedReader")
         self._inner = inner
         self._runtime = runtime
-        self._ctx = ffi.new("ReadingContext *")
+        self._ctx = ffi.new("MmapqReadingContext *")
         self._last_read_valid = False
         self._finalizer = weakref.finalize(self, _destroy_reader, inner)
 
@@ -56,7 +56,7 @@ class IndexedReader:
     def create(cls, directory: str, queue_name: str, *,
                ring_size: int = 4,
                timeout_ns: int = 10000000000,
-               runtime=None) -> IndexedReader:
+               runtime=None) -> MmapqIndexedReader:
         """Create or open a random-access reader.
 
         directory:   path to the queue data directory
@@ -68,12 +68,12 @@ class IndexedReader:
         non-existent queue return None (END_OF_STREAM).
         """
         rt = runtime._inner if runtime is not None else ffi.NULL
-        ptr = ffi.new("IndexedReader **")
-        rc = lib.indexed_reader_create(
+        ptr = ffi.new("MmapqIndexedReader **")
+        rc = lib.mmapq_indexed_reader_create(
             directory.encode(), queue_name.encode(),
             ring_size, timeout_ns, rt, ptr,
         )
-        check_rc(rc, "indexed_reader_create")
+        check_rc(rc, "mmapq_indexed_reader_create")
         return cls(ptr[0], runtime=runtime)
 
     def read(self, index: int) -> Optional[bytes]:
@@ -86,19 +86,19 @@ class IndexedReader:
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
-        lib.indexed_reader_read(self._inner, index, self._ctx)
+        lib.mmapq_indexed_reader_read(self._inner, index, self._ctx)
         return self._extract()
 
     def read_first(self) -> Optional[bytes]:
         """Read the first unarchived entry (at start_index)."""
         self._check_open()
-        lib.indexed_reader_read_first(self._inner, self._ctx)
+        lib.mmapq_indexed_reader_read_first(self._inner, self._ctx)
         return self._extract()
 
     def read_last(self) -> Optional[bytes]:
         """Read the last committed entry."""
         self._check_open()
-        lib.indexed_reader_read_last(self._inner, self._ctx)
+        lib.mmapq_indexed_reader_read_last(self._inner, self._ctx)
         return self._extract()
 
     def read_view(self, index: int) -> Optional[memoryview]:
@@ -111,33 +111,33 @@ class IndexedReader:
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
-        lib.indexed_reader_read(self._inner, index, self._ctx)
+        lib.mmapq_indexed_reader_read(self._inner, index, self._ctx)
         self._check_status()
-        if self._ctx.status == EntryStatus.AVAILABLE:
+        if self._ctx.status == MmapqEntryStatus.AVAILABLE:
             self._last_read_valid = True
             return memoryview(ffi.buffer(self._ctx.data, self._ctx.length))
         self._last_read_valid = False
         return None
 
-    def entry_status(self, index: int) -> EntryStatus:
+    def entry_status(self, index: int) -> MmapqEntryStatus:
         """Check availability of the entry at the given index.
 
-        Lightweight check that does not populate a ReadingContext.
+        Lightweight check that does not populate a MmapqReadingContext.
         """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
-        return EntryStatus(lib.indexed_reader_entry_status(self._inner, index))
+        return MmapqEntryStatus(lib.mmapq_indexed_reader_entry_status(self._inner, index))
 
     def last_index(self) -> int:
         """Highest committed index, or -1 if the queue is empty."""
         self._check_open()
-        return lib.indexed_reader_last_index(self._inner)
+        return lib.mmapq_indexed_reader_last_index(self._inner)
 
     def start_index(self) -> int:
         """Lowest readable index (0 if queue is not archivable)."""
         self._check_open()
-        return lib.indexed_reader_start_index(self._inner)
+        return lib.mmapq_indexed_reader_start_index(self._inner)
 
     def close(self) -> None:
         """Close the reader and release mapped regions. Idempotent."""
@@ -149,24 +149,24 @@ class IndexedReader:
 
     def _check_open(self):
         if self._inner is None:
-            raise QueueClosedError("IndexedReader is closed")
+            raise QueueClosedError("MmapqIndexedReader is closed")
 
     def _check_status(self):
         status = self._ctx.status
-        if status == EntryStatus.END_OF_STREAM:
+        if status == MmapqEntryStatus.END_OF_STREAM:
             return
-        if status == EntryStatus.ARCHIVED:
+        if status == MmapqEntryStatus.ARCHIVED:
             return
-        if status == EntryStatus.AVAILABLE:
+        if status == MmapqEntryStatus.AVAILABLE:
             return
-        if status == EntryStatus.ERROR:
-            rc = lib.indexed_reader_last_error(self._inner)
+        if status == MmapqEntryStatus.ERROR:
+            rc = lib.mmapq_indexed_reader_last_error(self._inner)
             if rc != 0:
-                check_rc(rc, "indexed_reader_read")
+                check_rc(rc, "mmapq_indexed_reader_read")
             raise MmapqError(
-                "indexed_reader_read: ENTRY_ERROR (mapping timeout or I/O failure)")
+                "mmapq_indexed_reader_read: MMAPQ_ENTRY_ERROR (mapping timeout or I/O failure)")
         raise QueueCorruptError(
-            f"indexed_reader_read: unknown status {status}")
+            f"mmapq_indexed_reader_read: unknown status {status}")
 
     def appender_id(self) -> int:
         """Return the appender ID of the last entry read.
@@ -186,7 +186,7 @@ class IndexedReader:
 
     def _extract(self) -> Optional[bytes]:
         self._check_status()
-        if self._ctx.status == EntryStatus.AVAILABLE:
+        if self._ctx.status == MmapqEntryStatus.AVAILABLE:
             self._last_read_valid = True
             return bytes(ffi.buffer(self._ctx.data, self._ctx.length))
         self._last_read_valid = False
@@ -200,7 +200,7 @@ class IndexedReader:
         return False
 
 
-class IndexedBatchReader:
+class MmapqIndexedBatchReader:
     """Random-access reader for an indexed batch queue.
 
     Reads any committed batch by index. Each read() returns a list of
@@ -209,10 +209,10 @@ class IndexedBatchReader:
     """
 
     def __init__(self, inner, *, runtime=None):
-        require_cdata(inner, "struct IndexedBatchReader *", "IndexedBatchReader")
+        require_cdata(inner, "struct MmapqIndexedBatchReader *", "MmapqIndexedBatchReader")
         self._inner = inner
         self._runtime = runtime
-        self._ctx = ffi.new("BatchReadingContext *")
+        self._ctx = ffi.new("MmapqBatchReadingContext *")
         self._last_read_valid = False
         self._finalizer = weakref.finalize(self, _destroy_batch_reader, inner)
 
@@ -220,22 +220,22 @@ class IndexedBatchReader:
     def create(cls, directory: str, queue_name: str, *,
                ring_size: int = 4,
                timeout_ns: int = 10000000000,
-               runtime=None) -> IndexedBatchReader:
+               runtime=None) -> MmapqIndexedBatchReader:
         """Create or open a batch reader.
 
         directory:   path to the queue data directory
         queue_name:  logical queue name
         ring_size:   number of simultaneously mapped regions
         timeout_ns:  region-mapping timeout in nanoseconds
-        runtime:     optional Runtime for async region mapping (keyword-only)
+        runtime:     optional MmapqRuntime for async region mapping (keyword-only)
         """
         rt = runtime._inner if runtime is not None else ffi.NULL
-        ptr = ffi.new("IndexedBatchReader **")
-        rc = lib.indexed_batch_reader_create(
+        ptr = ffi.new("MmapqIndexedBatchReader **")
+        rc = lib.mmapq_indexed_batch_reader_create(
             directory.encode(), queue_name.encode(),
             ring_size, timeout_ns, rt, ptr,
         )
-        check_rc(rc, "indexed_batch_reader_create")
+        check_rc(rc, "mmapq_indexed_batch_reader_create")
         return cls(ptr[0])
 
     def read(self, index: int) -> Optional[list[bytes]]:
@@ -246,30 +246,30 @@ class IndexedBatchReader:
         or has been archived.
         """
         self._check_open()
-        lib.indexed_batch_reader_read(self._inner, index, self._ctx)
+        lib.mmapq_indexed_batch_reader_read(self._inner, index, self._ctx)
         return self._extract_batch()
 
     def read_first(self) -> Optional[list[bytes]]:
         """Read the first unarchived batch (at start_index)."""
         self._check_open()
-        lib.indexed_batch_reader_read_first(self._inner, self._ctx)
+        lib.mmapq_indexed_batch_reader_read_first(self._inner, self._ctx)
         return self._extract_batch()
 
     def read_last(self) -> Optional[list[bytes]]:
         """Read the last committed batch."""
         self._check_open()
-        lib.indexed_batch_reader_read_last(self._inner, self._ctx)
+        lib.mmapq_indexed_batch_reader_read_last(self._inner, self._ctx)
         return self._extract_batch()
 
     def entry_status(self, index: int) -> int:
         """Check availability of the batch at the given index.
 
-        Returns a BatchEntryStatus value.
+        Returns a MmapqBatchEntryStatus value.
         """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
-        return lib.indexed_batch_reader_entry_status(self._inner, index)
+        return lib.mmapq_indexed_batch_reader_entry_status(self._inner, index)
 
     def batch_appender_id(self) -> int:
         """Return the appender ID of the last batch read.
@@ -291,12 +291,12 @@ class IndexedBatchReader:
     def last_index(self) -> int:
         """Highest committed batch index, or -1 if the queue is empty."""
         self._check_open()
-        return lib.indexed_batch_reader_last_index(self._inner)
+        return lib.mmapq_indexed_batch_reader_last_index(self._inner)
 
     def start_index(self) -> int:
         """First unarchived batch index (lowest readable)."""
         self._check_open()
-        return lib.indexed_batch_reader_start_index(self._inner)
+        return lib.mmapq_indexed_batch_reader_start_index(self._inner)
 
     def close(self) -> None:
         """Close the batch reader. Idempotent."""
@@ -308,30 +308,30 @@ class IndexedBatchReader:
 
     def _check_open(self):
         if self._inner is None:
-            raise QueueClosedError("IndexedBatchReader is closed")
+            raise QueueClosedError("MmapqIndexedBatchReader is closed")
 
     def _extract_batch(self) -> Optional[list[bytes]]:
-        from .types import BatchEntryStatus
+        from .types import MmapqBatchEntryStatus
         from .batch_poller import iter_batch_messages
         status = self._ctx.status
-        if status == BatchEntryStatus.AVAILABLE:
+        if status == MmapqBatchEntryStatus.AVAILABLE:
             self._last_read_valid = True
             return iter_batch_messages(self._ctx)
         else:
             self._last_read_valid = False
-        if status in (BatchEntryStatus.END_OF_STREAM,
-                      BatchEntryStatus.ARCHIVED):
+        if status in (MmapqBatchEntryStatus.END_OF_STREAM,
+                      MmapqBatchEntryStatus.ARCHIVED):
             return None
-        if status == BatchEntryStatus.ERROR:
-            rc = lib.indexed_batch_reader_last_error(self._inner)
+        if status == MmapqBatchEntryStatus.ERROR:
+            rc = lib.mmapq_indexed_batch_reader_last_error(self._inner)
             if rc != 0:
-                check_rc(rc, "indexed_batch_reader_read")
+                check_rc(rc, "mmapq_indexed_batch_reader_read")
             raise MmapqError(
-                "indexed_batch_reader_read: ENTRY_ERROR "
+                "mmapq_indexed_batch_reader_read: MMAPQ_ENTRY_ERROR "
                 "(mapping timeout or I/O failure)")
         else:
             raise QueueCorruptError(
-                f"indexed_batch_reader_read: unknown status {status}")
+                f"mmapq_indexed_batch_reader_read: unknown status {status}")
 
     def __enter__(self):
         return self

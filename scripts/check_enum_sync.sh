@@ -120,10 +120,24 @@ check_enum() {
 if [ "${1:-}" = "--self-test" ]; then
     TMP=$(mktemp -d)
     trap 'rm -rf "$TMP"' EXIT
-    C_INCLUDE="../mmapq/include"
-    if [ ! -f "$C_INCLUDE/poller.h" ]; then
-        echo "self-test: C headers not found -- skipping"
-        exit 0
+    C_INCLUDE="${MMAPQ_C_DIR:-}" 2>/dev/null || C_INCLUDE=""
+    if [ -z "$C_INCLUDE" ]; then
+        for d in "../mmapq/include" "c/include" "../mmapq/include"; do
+            if [ -f "$d/poller.h" ]; then
+                C_INCLUDE="$d"
+                break
+            fi
+        done
+    fi
+    if [ -z "$C_INCLUDE" ] || [ ! -f "$C_INCLUDE/poller.h" ]; then
+        if [ -n "${MMAPQ_SKIP_C_GATES:-}" ]; then
+            echo "WARNING: check_enum_sync.sh --self-test skipped (MMAPQ_SKIP_C_GATES set)" >&2
+            exit 0
+        fi
+        echo "ERROR: check_enum_sync.sh --self-test: C headers not found." >&2
+        echo "  Set MMAPQ_C_DIR to the mmapq/include directory, or run from the" >&2
+        echo "  cqueue workspace root where ../mmapq/include resolves." >&2
+        exit 1
     fi
 
     # Positive: correct tree must exit 0
@@ -159,16 +173,30 @@ TESTEOF
 fi
 
 # ── Normal path ────────────────────────────────────────────────────────────
-C_INCLUDE="../mmapq/include"
-if [ ! -f "$C_INCLUDE/poller.h" ]; then
-    echo "check_enum_sync.sh: C headers not found at $C_INCLUDE -- skipping (sdist checkout)"
-    exit 0
+C_INCLUDE="${MMAPQ_C_DIR:-}"
+if [ -z "$C_INCLUDE" ]; then
+    for d in "c/include" "../mmapq/include"; do
+        if [ -d "$d" ]; then
+            C_INCLUDE="$d"
+            break
+        fi
+    done
+fi
+if [ -z "$C_INCLUDE" ] || [ ! -d "$C_INCLUDE" ]; then
+    if [ -n "${MMAPQ_SKIP_C_GATES:-}" ]; then
+        echo "WARNING: check_enum_sync.sh: C headers not found (MMAPQ_SKIP_C_GATES set)" >&2
+        exit 0
+    fi
+    echo "ERROR: check_enum_sync.sh: C headers not found at $C_INCLUDE." >&2
+    echo "  Set MMAPQ_C_DIR to the mmapq/include directory, or run from the" >&2
+    echo "  cqueue workspace root." >&2
+    exit 1
 fi
 
 TYPES_PY="src/mmapq/types.py"
 if [ ! -f "$TYPES_PY" ]; then
-    echo "check_enum_sync.sh: types.py not found -- skipping"
-    exit 0
+    echo "ERROR: check_enum_sync.sh: types.py not found at $TYPES_PY" >&2
+    exit 1
 fi
 
 # ── Enum mapping table ────────────────────────────────────────────────────

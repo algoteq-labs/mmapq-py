@@ -32,16 +32,16 @@ and Python.
 ### Single-message queue
 
 ```python
-from mmapq import IndexedQueue, NextMove
+from mmapq import MmapqIndexedQueue, MmapqNextMove
 
-q = IndexedQueue.create("/dev/shm", "my_queue")
+q = MmapqIndexedQueue.create("/dev/shm", "my_queue")
 
 appender = q.create_appender()
 appender.append(b"hello world")        # committed atomically
 
 def handler(index, appender_id, data):
     print(f"[{index}] {data!r}")
-    return NextMove.ADVANCE
+    return MmapqNextMove.ADVANCE
 
 poller = q.create_poller()
 poller.poll(handler)
@@ -50,9 +50,9 @@ poller.poll(handler)
 ### Batch queue (atomic multi-message commit)
 
 ```python
-from mmapq import IndexedBatchQueue, NextMove
+from mmapq import MmapqIndexedBatchQueue, MmapqNextMove
 
-q = IndexedBatchQueue.create("/dev/shm", "events")
+q = MmapqIndexedBatchQueue.create("/dev/shm", "events")
 appender = q.create_appender()
 
 with appender.start_batch() as batch:      # context manager = transaction
@@ -67,9 +67,9 @@ with appender.start_batch() as batch:      # context manager = transaction
 ### Reading and replay (random access)
 
 ```python
-from mmapq import IndexedReader, export_queue
+from mmapq import MmapqIndexedReader, export_queue
 
-reader = IndexedReader.create("/dev/shm", "events")
+reader = MmapqIndexedReader.create("/dev/shm", "events")
 first = reader.read_first()              # bytes | None
 last  = reader.read_last()
 msg   = reader.read(42)                  # read any committed index
@@ -110,26 +110,26 @@ pip install -e .        # builds the cffi extension against the C sources
 ```python
 from mmapq import (
     # Shared types
-    NextMove,               # Handler return: ADVANCE, STOP, RETREAT
-    PollResult,             # Poll result: END_OF_STREAM, ADVANCED, etc.
-    BatchPollResult,        # Alias for PollResult
-    BatchEntryStatus,       # Batch availability
-    EntryStatus,            # Entry availability (reader)
+    MmapqNextMove,               # Handler return: ADVANCE, STOP, RETREAT
+    MmapqPollResult,             # Poll result: END_OF_STREAM, ADVANCED, etc.
+    BatchPollResult,        # Alias for MmapqPollResult
+    MmapqBatchEntryStatus,       # Batch availability
+    MmapqEntryStatus,            # Entry availability (reader)
 
     # Single-message queue
-    IndexedQueue,           # Queue factory
-    IndexedAppender,        # Producer
-    IndexedPoller,          # Sequential consumer
+    MmapqIndexedQueue,           # Queue factory
+    MmapqIndexedAppender,        # Producer
+    MmapqIndexedPoller,          # Sequential consumer
 
     # Batch queue
-    IndexedBatchQueue,      # Queue factory
-    IndexedBatchPoller,     # Sequential batch consumer
-    IndexedBatchAppender,   # Batch producer
+    MmapqIndexedBatchQueue,      # Queue factory
+    MmapqIndexedBatchPoller,     # Sequential batch consumer
+    MmapqIndexedBatchAppender,   # Batch producer
     BatchWriter,            # In-progress batch (context manager)
 
     # Random-access readers
-    IndexedReader,          # Single-message reader
-    IndexedBatchReader,     # Batch reader
+    MmapqIndexedReader,          # Single-message reader
+    MmapqIndexedBatchReader,     # Batch reader
 
     # Exceptions
     MmapqError,             # Base exception
@@ -140,11 +140,11 @@ from mmapq import (
     AppenderIdConflictError,# Appender ID conflict
     MmapOutOfMemoryError,   # Allocation failure
 
-    # Runtime
-    Runtime,                # Async region mapper
+    # MmapqRuntime
+    MmapqRuntime,                # Async region mapper
 
     # Archiver
-    IndexedArchiver,        # Start-index management (single-message)
+    MmapqIndexedArchiver,        # Start-index management (single-message)
 
     # Transfer (export/import/copy)
     export_queue,           # Export queue to flat stream
@@ -167,7 +167,7 @@ The handler passed to `poller.poll()` receives `(index: int, appender_id: int, d
 ```python
 def handler(index, appender_id, data):
     print(f"[{index}] {data}")
-    return NextMove.ADVANCE
+    return MmapqNextMove.ADVANCE
 ```
 
 ### Batch handler callback
@@ -179,24 +179,24 @@ def handler(batch_index, messages):
     # messages is a list of payload bytes, one per message in the batch
     for msg in messages:
         print(f"[{batch_index}] {msg}")
-    return NextMove.ADVANCE
+    return MmapqNextMove.ADVANCE
 ```
 
 ### Additional appender methods
 
-`IndexedAppender` (single-message) also provides:
+`MmapqIndexedAppender` (single-message) also provides:
 
 - **`append_uncommitted(data)`** — writes payload without committing. Invisible to readers,
   discarded by crash recovery. Returns a payload offset for later use with `commit()`.
 - **`commit(payload_offset)`** — publishes a previously uncommitted payload. Returns the
   committed index.
 
-`IndexedQueue` (single-message) also provides:
+`MmapqIndexedQueue` (single-message) also provides:
 
 - **`create_appender_with_id(appender_id)`** — creates an appender with a specific lane ID
   (0–255). Raises `ValueError` if the ID is out of range.
 
-`IndexedBatchQueue` (batch) also provides:
+`MmapqIndexedBatchQueue` (batch) also provides:
 
 - **`create_appender_with_id(appender_id)`** — creates a batch appender with a specific lane ID
   (0–255). Raises `ValueError` if the ID is out of range.
@@ -204,22 +204,22 @@ def handler(batch_index, messages):
   — full-configuration create. All params match the C library's `INDEXED_QUEUE_DEFAULT_*` constants.
   Existing queues ignore sizing params (on-disk config is authoritative).
 
-`IndexedBatchAppender` (batch) also provides:
+`MmapqIndexedBatchAppender` (batch) also provides:
 
 - **`id()`** — returns this appender's lane ID (0–255).
 
 ### Sync vs async mapping
 
 By default mapping happens synchronously on the hot path. For async background
-region mapping, pass a `Runtime`:
+region mapping, pass a `MmapqRuntime`:
 
 ```python
-from mmapq import Runtime, IndexedQueue
+from mmapq import MmapqRuntime, MmapqIndexedQueue
 
-rt = Runtime.region_mapper()
-q = IndexedQueue.create("/dev/shm", "rt_queue", runtime=rt)
+rt = MmapqRuntime.region_mapper()
+q = MmapqIndexedQueue.create("/dev/shm", "rt_queue", runtime=rt)
 
-# Runtime is kept alive by the queue — safe to drop the local reference
+# MmapqRuntime is kept alive by the queue — safe to drop the local reference
 del rt
 ```
 
@@ -229,12 +229,12 @@ An archivable queue (`archivable=True`) can advance its start index so old
 entries become inaccessible and their backing files can be safely deleted:
 
 ```python
-from mmapq import IndexedArchiver, IndexedQueue
+from mmapq import MmapqIndexedArchiver, MmapqIndexedQueue
 
-q = IndexedQueue.create("/dev/shm", "arch_q", archivable=True)
+q = MmapqIndexedQueue.create("/dev/shm", "arch_q", archivable=True)
 # ... produce messages ...
 
-arch = IndexedArchiver.create("/dev/shm", "arch_q")
+arch = MmapqIndexedArchiver.create("/dev/shm", "arch_q")
 arch.archive_up_to_index(1000)          # archive entries < 1000
 files = arch.archivable_files()         # paths safe to delete
 for path in files:
@@ -284,7 +284,7 @@ n = copy_batch_to_normal("/dev/shm", "batch_src", "/dev/shm", "flat_dst")
 #   allow_append=True    — append to existing queue instead of refusing
 #   preserve=True        — keep original index space from source
 #   mapper=callable      — map source appender IDs to destination IDs
-#   on_conflict=<enum>   — ConflictBehavior.AUTO or .ABORT
+#   on_conflict=<enum>   — MmapqConflictBehavior.AUTO or .ABORT
 ```
 
 ## Examples

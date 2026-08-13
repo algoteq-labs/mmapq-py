@@ -19,7 +19,7 @@ import threading
 import time
 import struct
 
-from mmapq import IndexedBatchQueue, NextMove, PollResult
+from mmapq import MmapqIndexedBatchQueue, MmapqNextMove, MmapqPollResult
 
 SHUTDOWN_SEQ = 0
 LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence
@@ -30,7 +30,7 @@ DEFAULT_WARMUP = 10000
 DEFAULT_MSG_SIZE = 64
 
 
-def monotonic_nanos():
+def mmapq_monotonic_nanos():
     """Return monotonic timestamp in nanoseconds."""
     import ctypes
     libc = ctypes.CDLL("libc.so.6")
@@ -86,8 +86,8 @@ class BatchLatencyProbe:
         self.current_seq = 0
         self.response_received = False
 
-        q_req = IndexedBatchQueue.create(directory, request_name)
-        q_res = IndexedBatchQueue.create(directory, response_name)
+        q_req = MmapqIndexedBatchQueue.create(directory, request_name)
+        q_res = MmapqIndexedBatchQueue.create(directory, response_name)
         self.request_appender = q_req.create_appender()
         self.response_poller = q_res.create_poller()
         self.response_poller.move_to_end()
@@ -103,7 +103,7 @@ class BatchLatencyProbe:
         struct.pack_into(LATENCY_HEADER_FMT, self.msg_buffer, 0,
                          self.instance_id, self.current_seq)
 
-        start = monotonic_nanos()
+        start = mmapq_monotonic_nanos()
 
         with self.request_appender.start_batch() as writer:
             writer.append(bytes(self.msg_buffer))
@@ -117,12 +117,12 @@ class BatchLatencyProbe:
                 (rid, rseq) = struct.unpack(LATENCY_HEADER_FMT, messages[0][:6])
                 if rid == my_id and rseq == my_seq:
                     self.response_received = True
-            return NextMove.ADVANCE
+            return MmapqNextMove.ADVANCE
 
         while not self.response_received:
             self.response_poller.poll(response_handler)
 
-        return monotonic_nanos() - start
+        return mmapq_monotonic_nanos() - start
 
     def close(self):
         self.request_appender.close()
@@ -143,16 +143,16 @@ class BatchLatencyProbe:
             writer.append(bytes(self.msg_buffer))
             writer.commit()
 
-        timeout_at = monotonic_nanos() + 2_000_000_000
+        timeout_at = mmapq_monotonic_nanos() + 2_000_000_000
 
         def shutdown_handler(_bi, messages):
             if messages and len(messages[0]) >= 6:
                 (_, rseq) = struct.unpack(LATENCY_HEADER_FMT, messages[0][:6])
                 if rseq == SHUTDOWN_SEQ:
                     self.response_received = True
-            return NextMove.ADVANCE
+            return MmapqNextMove.ADVANCE
 
-        while not self.response_received and monotonic_nanos() < timeout_at:
+        while not self.response_received and mmapq_monotonic_nanos() < timeout_at:
             self.response_poller.poll(shutdown_handler)
 
         self.current_seq = saved_seq
@@ -166,8 +166,8 @@ def internal_server(directory,
     if server_cpu >= 0:
         _pin_thread(server_cpu)
 
-    q_req = IndexedBatchQueue.create(directory, request_name)
-    q_res = IndexedBatchQueue.create(directory, response_name)
+    q_req = MmapqIndexedBatchQueue.create(directory, request_name)
+    q_res = MmapqIndexedBatchQueue.create(directory, response_name)
     poller = q_req.create_poller()
     appender = q_res.create_appender()
 
@@ -176,7 +176,7 @@ def internal_server(directory,
     def echo_handler(batch_index, messages):
         nonlocal shutdown
         if not messages:
-            return NextMove.ADVANCE
+            return MmapqNextMove.ADVANCE
 
         first = messages[0]
         if len(first) >= 6:
@@ -189,11 +189,11 @@ def internal_server(directory,
                 writer.append(msg)
             writer.commit()
 
-        return NextMove.ADVANCE
+        return MmapqNextMove.ADVANCE
 
     while not shutdown:
         result = poller.poll(echo_handler)
-        if result == PollResult.END_OF_STREAM:
+        if result == MmapqPollResult.END_OF_STREAM:
             # Spin briefly when empty
             pass
 
@@ -277,10 +277,10 @@ def main():
 
     print("Measuring...")
     results = []
-    start_bench = monotonic_nanos()
+    start_bench = mmapq_monotonic_nanos()
     for _ in range(iterations):
         results.append(probe.execute())
-    end_bench = monotonic_nanos()
+    end_bench = mmapq_monotonic_nanos()
 
     print_stats(results, end_bench - start_bench,
                 "Batch Round-Trip Latency Statistics (nanoseconds):")

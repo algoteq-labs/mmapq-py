@@ -18,7 +18,25 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 CDEF="$HERE/setup.py"
-INCLUDE_DIR="$HERE/../mmapq/include"
+C_INCLUDE="${MMAPQ_C_DIR:-}"
+if [ -z "$C_INCLUDE" ]; then
+    for d in "$HERE/c/include" "$HERE/../mmapq/include"; do
+        if [ -d "$d" ]; then
+            C_INCLUDE="$d"
+            break
+        fi
+    done
+fi
+if [ -z "$C_INCLUDE" ] || [ ! -d "$C_INCLUDE" ]; then
+    if [ -n "${MMAPQ_SKIP_C_GATES:-}" ]; then
+        echo "WARNING: check_no_layout_mirrors.sh: C headers not found (MMAPQ_SKIP_C_GATES set)" >&2
+        exit 0
+    fi
+    echo "ERROR: check_no_layout_mirrors.sh: C headers not found." >&2
+    echo "  Set MMAPQ_C_DIR to the mmapq/include directory." >&2
+    exit 1
+fi
+INCLUDE_DIR="$C_INCLUDE"
 SELF_TEST_DIR="/tmp/mmapq-self-test-cdef"
 
 # Strip C comments from a file

@@ -1,4 +1,4 @@
-"""IndexedBatchAppender — producer-side batch writer."""
+"""MmapqIndexedBatchAppender — producer-side batch writer."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ lib = _cffi_mod.lib
 
 def _destroy_batch_appender(inner):
     if inner is not None:
-        lib.indexed_batch_appender_close(inner)
+        lib.mmapq_indexed_batch_appender_close(inner)
 
 
 class BatchWriter:
@@ -39,11 +39,11 @@ class BatchWriter:
         Raises ValueError if data is empty or exceeds region_size.
         """
         buf = ffi.from_buffer(data)
-        rc = lib.mutable_batch_append(self._inner, buf, len(data))
-        return check_rc(rc, "mutable_batch_append")
+        rc = lib.mmapq_mutable_batch_append(self._inner, buf, len(data))
+        return check_rc(rc, "mmapq_mutable_batch_append")
 
     def append_remaining_from(self, it) -> int:
-        """Append all remaining messages from a BatchPayloadIterator.
+        """Append all remaining messages from a MmapqBatchPayloadIterator.
 
         The iterator must be positioned before or at the first un-copied
         message. Returns the number of messages appended.
@@ -51,7 +51,7 @@ class BatchWriter:
         region_size — the batch is partially populated and must be
         discarded, not committed.
         """
-        rc = lib.mutable_batch_append_remaining_from(self._inner, it)
+        rc = lib.mmapq_mutable_batch_append_remaining_from(self._inner, it)
         return check_rc(rc, "append_remaining_from")
 
     def commit(self) -> int:
@@ -62,10 +62,10 @@ class BatchWriter:
         """
         if self._committed:
             raise MmapqError("batch already committed")
-        offset = lib.mutable_batch_complete(self._inner)
+        offset = lib.mmapq_mutable_batch_complete(self._inner)
         if offset < 0:
-            raise MmapqError("mutable_batch_complete failed")
-        idx = lib.indexed_batch_appender_commit_batch(self._appender._inner, offset)
+            raise MmapqError("mmapq_mutable_batch_complete failed")
+        idx = lib.mmapq_indexed_batch_appender_commit_batch(self._appender._inner, offset)
         if idx < 0:
             raise MmapqError("commit_batch failed")
         self._committed = True
@@ -77,34 +77,34 @@ class BatchWriter:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if not self._committed:
             # Auto-rollback on error or missing commit()
-            offset = lib.mutable_batch_complete(self._inner)
+            offset = lib.mmapq_mutable_batch_complete(self._inner)
             if offset >= 0:
-                lib.indexed_batch_appender_discard_batch(self._appender._inner, offset)
+                lib.mmapq_indexed_batch_appender_discard_batch(self._appender._inner, offset)
         return False
 
 
-class IndexedBatchAppender:
+class MmapqIndexedBatchAppender:
     """Batch appender.
 
     Thread-confined. One per producer lane.
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct IndexedBatchAppender *", "IndexedBatchAppender")
+        require_cdata(inner, "struct MmapqIndexedBatchAppender *", "MmapqIndexedBatchAppender")
         self._inner = inner
         self._runtime = None
         self._finalizer = weakref.finalize(self, _destroy_batch_appender, inner)
 
     def start_batch(self) -> BatchWriter:
         """Start a new batch write session."""
-        ptr = lib.indexed_batch_appender_start_batch(self._inner)
+        ptr = lib.mmapq_indexed_batch_appender_start_batch(self._inner)
         if not ptr:
             raise MmapqError("start_batch returned NULL")
         return BatchWriter(self, ptr)
 
     def id(self) -> int:
         """Return this appender's lane ID (0–255)."""
-        return lib.indexed_batch_appender_id(self._inner)
+        return lib.mmapq_indexed_batch_appender_id(self._inner)
 
     def close(self):
         self._finalizer.detach()
@@ -120,4 +120,4 @@ class IndexedBatchAppender:
 
     def __del__(self):
         if self._inner is not None:
-            lib.indexed_batch_appender_close(self._inner)
+            lib.mmapq_indexed_batch_appender_close(self._inner)

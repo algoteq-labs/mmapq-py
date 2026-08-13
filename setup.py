@@ -16,53 +16,53 @@ ffi = FFI()
 
 ffi.cdef("""
     /* ── Enums ──────────────────────────────────────────────────────────── */
-    typedef enum { NEXT_ADVANCE = 0, NEXT_STOP = 1, NEXT_RETREAT = 2 } NextMove;
-    typedef enum { POLL_END_OF_STREAM, POLL_ADVANCED, POLL_STOPPED,
-                   POLL_RETREATED, POLL_ARCHIVED, POLL_ERROR,
-                   POLL_CORRUPT } PollResult;
+    typedef enum { MMAPQ_NEXT_ADVANCE = 0, MMAPQ_NEXT_STOP = 1, MMAPQ_NEXT_RETREAT = 2 } MmapqNextMove;
+    typedef enum { MMAPQ_POLL_END_OF_STREAM, MMAPQ_POLL_ADVANCED, MMAPQ_POLL_STOPPED,
+                   MMAPQ_POLL_RETREATED, MMAPQ_POLL_ARCHIVED, MMAPQ_POLL_ERROR,
+                   MMAPQ_POLL_CORRUPT } MmapqPollResult;
 
     /* ── Opaque types ────────────────────────────────────────────────────── */
-    typedef struct IndexedQueue IndexedQueue;
-    typedef struct IndexedAppender IndexedAppender;
-    typedef struct IndexedPoller IndexedPoller;
-    typedef struct IndexedBatchQueue IndexedBatchQueue;
-    typedef struct IndexedBatchPoller IndexedBatchPoller;
-    typedef struct IndexedBatchAppender IndexedBatchAppender;
-    typedef struct MutableBatch MutableBatch;
-    typedef struct Runtime Runtime;
+    typedef struct MmapqIndexedQueue MmapqIndexedQueue;
+    typedef struct MmapqIndexedAppender MmapqIndexedAppender;
+    typedef struct MmapqIndexedPoller MmapqIndexedPoller;
+    typedef struct MmapqIndexedBatchQueue MmapqIndexedBatchQueue;
+    typedef struct MmapqIndexedBatchPoller MmapqIndexedBatchPoller;
+    typedef struct MmapqIndexedBatchAppender MmapqIndexedBatchAppender;
+    typedef struct MmapqMutableBatch MmapqMutableBatch;
+    typedef struct MmapqRuntime MmapqRuntime;
 
-    /* BatchPayloadIterator is opaque — struct definition is private to C.
-       Access through batch_iterator_advance(), batch_iterator_current_data_ffi(),
-       etc. The typedef is needed for pointer declarations in BatchReadingContext. */
-    typedef struct IndexedReader IndexedReader;
-    typedef struct IndexedBatchReader IndexedBatchReader;
-    typedef struct IndexedArchiver IndexedArchiver;
-    typedef struct IndexedBatchArchiver IndexedBatchArchiver;
-    typedef struct BatchPayloadIterator BatchPayloadIterator;
+    /* MmapqBatchPayloadIterator is opaque — struct definition is private to C.
+       Access through mmapq_batch_iterator_advance(), mmapq_batch_iterator_current_data_ffi(),
+       etc. The typedef is needed for pointer declarations in MmapqBatchReadingContext. */
+    typedef struct MmapqIndexedReader MmapqIndexedReader;
+    typedef struct MmapqIndexedBatchReader MmapqIndexedBatchReader;
+    typedef struct MmapqIndexedArchiver MmapqIndexedArchiver;
+    typedef struct MmapqIndexedBatchArchiver MmapqIndexedBatchArchiver;
+    typedef struct MmapqBatchPayloadIterator MmapqBatchPayloadIterator;
 
-    /* ── BatchReadingContext ──────────────────────────────────────────────── */
-    typedef enum { BATCH_ENTRY_AVAILABLE, BATCH_ENTRY_END_OF_STREAM,
-                   BATCH_ENTRY_ARCHIVED, BATCH_ENTRY_ERROR } BatchEntryStatus;
+    /* ── MmapqBatchReadingContext ──────────────────────────────────────────────── */
+    typedef enum { MMAPQ_BATCH_ENTRY_AVAILABLE, MMAPQ_BATCH_ENTRY_END_OF_STREAM,
+                   MMAPQ_BATCH_ENTRY_ARCHIVED, MMAPQ_BATCH_ENTRY_ERROR } MmapqBatchEntryStatus;
 
     typedef struct {
         int64_t               index;
-        BatchEntryStatus      status;
+        MmapqBatchEntryStatus      status;
         int64_t               batch_offset;
         int32_t               message_count;
         uint8_t               appender_id;
         uint8_t               reserved[3];
-        BatchPayloadIterator *iterator;
-    } BatchReadingContext;
+        MmapqBatchPayloadIterator *iterator;
+    } MmapqBatchReadingContext;
 
     /* ── Handler callback ─────────────────────────────────────────────────── */
-    typedef NextMove (*BatchHandler)(int64_t, BatchReadingContext*, void*);
+    typedef MmapqNextMove (*MmapqBatchHandler)(int64_t, MmapqBatchReadingContext*, void*);
 
-    /* ── Runtime ──────────────────────────────────────────────────────────── */
-    int  runtime_region_mapper(Runtime**);
-    int  runtime_set_affinity(Runtime*, int cpu_core);
-    void runtime_destroy(Runtime*);
+    /* ── MmapqRuntime ──────────────────────────────────────────────────────────── */
+    int  mmapq_runtime_region_mapper(MmapqRuntime**);
+    int  mmapq_runtime_set_affinity(MmapqRuntime*, int cpu_core);
+    void mmapq_runtime_destroy(MmapqRuntime*);
 
-    /* ── ReadingContext (single-message result struct) ────────────────────── */
+    /* ── MmapqReadingContext (single-message result struct) ────────────────────── */
     typedef struct {
         int64_t  index;
         uint8_t  appender_id;
@@ -70,230 +70,230 @@ ffi.cdef("""
         void    *data;
         int32_t  length;
         int      status;
-    } ReadingContext;
+    } MmapqReadingContext;
 
-    /* ── MessageHandler (single-message poller) ────────────────────────────── */
-    typedef NextMove (*MessageHandler)(int64_t, uint8_t, const void*, int32_t, void*);
+    /* ── MmapqMessageHandler (single-message poller) ────────────────────────────── */
+    typedef MmapqNextMove (*MmapqMessageHandler)(int64_t, uint8_t, const void*, int32_t, void*);
 
     /* ── Single-message queue factory ──────────────────────────────────────── */
-    int    indexed_queue_create(
+    int    mmapq_indexed_queue_create(
                const char*, const char*, int32_t, int, int,
                int64_t, int64_t, uint64_t, int,
-               Runtime*, Runtime*, IndexedQueue**);
-    int    indexed_queue_create_default(
-               const char*, const char*, Runtime*, Runtime*, IndexedQueue**);
-    int    indexed_queue_create_appender(IndexedQueue*, IndexedAppender**);
-    int    indexed_queue_create_appender_with_id(IndexedQueue*, uint8_t, IndexedAppender**);
-    int    indexed_queue_create_poller(IndexedQueue*, IndexedPoller**);
-    void             indexed_queue_close(IndexedQueue*);
-    int64_t  indexed_appender_append(IndexedAppender*, const void*, int32_t);
-    int64_t  indexed_appender_append_uncommitted(
-                 IndexedAppender*, const void*, int32_t);
-    int64_t  indexed_appender_commit(IndexedAppender*, int64_t);
-    int64_t  indexed_appender_current_index(const IndexedAppender*);
-    uint8_t  indexed_appender_id(const IndexedAppender*);
-    void     indexed_appender_close(IndexedAppender*);
+               MmapqRuntime*, MmapqRuntime*, MmapqIndexedQueue**);
+    int    mmapq_indexed_queue_create_default(
+               const char*, const char*, MmapqRuntime*, MmapqRuntime*, MmapqIndexedQueue**);
+    int    mmapq_indexed_queue_create_appender(MmapqIndexedQueue*, MmapqIndexedAppender**);
+    int    mmapq_indexed_queue_create_appender_with_id(MmapqIndexedQueue*, uint8_t, MmapqIndexedAppender**);
+    int    mmapq_indexed_queue_create_poller(MmapqIndexedQueue*, MmapqIndexedPoller**);
+    void             mmapq_indexed_queue_close(MmapqIndexedQueue*);
+    int64_t  mmapq_indexed_appender_append(MmapqIndexedAppender*, const void*, int32_t);
+    int64_t  mmapq_indexed_appender_append_uncommitted(
+                 MmapqIndexedAppender*, const void*, int32_t);
+    int64_t  mmapq_indexed_appender_commit(MmapqIndexedAppender*, int64_t);
+    int64_t  mmapq_indexed_appender_current_index(const MmapqIndexedAppender*);
+    uint8_t  mmapq_indexed_appender_id(const MmapqIndexedAppender*);
+    void     mmapq_indexed_appender_close(MmapqIndexedAppender*);
 
     /* ── Single-message poller ─────────────────────────────────────────────── */
-    int indexed_poller_create(const char*, const char*, int, uint64_t, Runtime*, IndexedPoller**);
-    PollResult     indexed_poller_poll(IndexedPoller*, MessageHandler, void*);
-    int            indexed_poller_move_to_index(IndexedPoller*, int64_t);
-    int            indexed_poller_move_to_end(IndexedPoller*);
-    int            indexed_poller_move_to_last(IndexedPoller*);
-    int            indexed_poller_move_to_start(IndexedPoller*);
-    int64_t        indexed_poller_current_index(const IndexedPoller*);
-    int64_t        indexed_poller_start_index(IndexedPoller*);
-    int            indexed_poller_exists(IndexedPoller*, int64_t);
-    int            indexed_poller_last_error(const IndexedPoller*);
-    void           indexed_poller_close(IndexedPoller*);
+    int mmapq_indexed_poller_create(const char*, const char*, int, uint64_t, MmapqRuntime*, MmapqIndexedPoller**);
+    MmapqPollResult     mmapq_indexed_poller_poll(MmapqIndexedPoller*, MmapqMessageHandler, void*);
+    int            mmapq_indexed_poller_move_to_index(MmapqIndexedPoller*, int64_t);
+    int            mmapq_indexed_poller_move_to_end(MmapqIndexedPoller*);
+    int            mmapq_indexed_poller_move_to_last(MmapqIndexedPoller*);
+    int            mmapq_indexed_poller_move_to_start(MmapqIndexedPoller*);
+    int64_t        mmapq_indexed_poller_current_index(const MmapqIndexedPoller*);
+    int64_t        mmapq_indexed_poller_start_index(MmapqIndexedPoller*);
+    int            mmapq_indexed_poller_exists(MmapqIndexedPoller*, int64_t);
+    int            mmapq_indexed_poller_last_error(const MmapqIndexedPoller*);
+    void           mmapq_indexed_poller_close(MmapqIndexedPoller*);
 
     /* ── Batch queue factory ───────────────────────────────────────────────── */
-    int indexed_batch_queue_create(
+    int mmapq_indexed_batch_queue_create(
         const char*, const char*, int32_t, int, int,
         int64_t, int64_t, uint64_t, int,
-        Runtime*, Runtime*, IndexedBatchQueue**);
-    int indexed_batch_queue_create_default(
-        const char*, const char*, Runtime*, Runtime*, IndexedBatchQueue**);
-    int indexed_batch_queue_create_poller(
-        IndexedBatchQueue*, IndexedBatchPoller**);
-    int indexed_batch_queue_create_appender(
-        IndexedBatchQueue*, IndexedBatchAppender**);
-    int indexed_batch_queue_create_appender_with_id(
-        IndexedBatchQueue*, uint8_t, IndexedBatchAppender**);
-    int indexed_batch_queue_create_reader(
-        IndexedBatchQueue*, IndexedBatchReader**);
-    int indexed_batch_queue_create_archiver(
-        IndexedBatchQueue*, IndexedBatchArchiver**);
-    void indexed_batch_queue_close(IndexedBatchQueue*);
+        MmapqRuntime*, MmapqRuntime*, MmapqIndexedBatchQueue**);
+    int mmapq_indexed_batch_queue_create_default(
+        const char*, const char*, MmapqRuntime*, MmapqRuntime*, MmapqIndexedBatchQueue**);
+    int mmapq_indexed_batch_queue_create_poller(
+        MmapqIndexedBatchQueue*, MmapqIndexedBatchPoller**);
+    int mmapq_indexed_batch_queue_create_appender(
+        MmapqIndexedBatchQueue*, MmapqIndexedBatchAppender**);
+    int mmapq_indexed_batch_queue_create_appender_with_id(
+        MmapqIndexedBatchQueue*, uint8_t, MmapqIndexedBatchAppender**);
+    int mmapq_indexed_batch_queue_create_reader(
+        MmapqIndexedBatchQueue*, MmapqIndexedBatchReader**);
+    int mmapq_indexed_batch_queue_create_archiver(
+        MmapqIndexedBatchQueue*, MmapqIndexedBatchArchiver**);
+    void mmapq_indexed_batch_queue_close(MmapqIndexedBatchQueue*);
 
     /* ── Batch poller ─────────────────────────────────────────────────────── */
-    int indexed_batch_poller_create(
-        const char*, const char*, int, uint64_t, Runtime*, IndexedBatchPoller**);
-    PollResult          indexed_batch_poller_poll(
-        IndexedBatchPoller*, BatchHandler, void*);
-    int                 indexed_batch_poller_move_to_index(
-        IndexedBatchPoller*, int64_t);
-    int                 indexed_batch_poller_move_to_end(
-        IndexedBatchPoller*);
-    int                 indexed_batch_poller_move_to_last_existing_batch(
-        IndexedBatchPoller*);
-    int                 indexed_batch_poller_move_to_start(
-        IndexedBatchPoller*);
-    int64_t             indexed_batch_poller_current_batch_index(
-        const IndexedBatchPoller*);
-    int64_t             indexed_batch_poller_start_index(
-        IndexedBatchPoller*);
-    int                 indexed_batch_poller_exists(
-        IndexedBatchPoller*, int64_t);
-    int                 indexed_batch_poller_last_error(
-        const IndexedBatchPoller*);
-    void                indexed_batch_poller_close(
-        IndexedBatchPoller*);
+    int mmapq_indexed_batch_poller_create(
+        const char*, const char*, int, uint64_t, MmapqRuntime*, MmapqIndexedBatchPoller**);
+    MmapqPollResult          mmapq_indexed_batch_poller_poll(
+        MmapqIndexedBatchPoller*, MmapqBatchHandler, void*);
+    int                 mmapq_indexed_batch_poller_move_to_index(
+        MmapqIndexedBatchPoller*, int64_t);
+    int                 mmapq_indexed_batch_poller_move_to_end(
+        MmapqIndexedBatchPoller*);
+    int                 mmapq_indexed_batch_poller_move_to_last_existing_batch(
+        MmapqIndexedBatchPoller*);
+    int                 mmapq_indexed_batch_poller_move_to_start(
+        MmapqIndexedBatchPoller*);
+    int64_t             mmapq_indexed_batch_poller_current_batch_index(
+        const MmapqIndexedBatchPoller*);
+    int64_t             mmapq_indexed_batch_poller_start_index(
+        MmapqIndexedBatchPoller*);
+    int                 mmapq_indexed_batch_poller_exists(
+        MmapqIndexedBatchPoller*, int64_t);
+    int                 mmapq_indexed_batch_poller_last_error(
+        const MmapqIndexedBatchPoller*);
+    void                mmapq_indexed_batch_poller_close(
+        MmapqIndexedBatchPoller*);
 
     /* ── Batch payload iterator ──────────────────────────────────────────── */
-    int      batch_iterator_advance(BatchPayloadIterator*);
-    int32_t  batch_iterator_current_length_ffi(const BatchPayloadIterator*);
-    const void* batch_iterator_current_data_ffi(const BatchPayloadIterator*);
-    int32_t  batch_iterator_read_message_count(BatchPayloadIterator*, int64_t);
-    BatchPayloadIterator* batch_iterator_init(
-        BatchPayloadIterator*, int64_t, int32_t, int32_t);
+    int      mmapq_batch_iterator_advance(MmapqBatchPayloadIterator*);
+    int32_t  mmapq_batch_iterator_current_length_ffi(const MmapqBatchPayloadIterator*);
+    const void* mmapq_batch_iterator_current_data_ffi(const MmapqBatchPayloadIterator*);
+    int32_t  mmapq_batch_iterator_read_message_count(MmapqBatchPayloadIterator*, int64_t);
+    MmapqBatchPayloadIterator* mmapq_batch_iterator_init(
+        MmapqBatchPayloadIterator*, int64_t, int32_t, int32_t);
 
     /* ── Batch appender ──────────────────────────────────────────────────── */
-    MutableBatch* indexed_batch_appender_start_batch(IndexedBatchAppender*);
-    int64_t       mutable_batch_complete(MutableBatch*);
-    int64_t       indexed_batch_appender_commit_batch(
-                      IndexedBatchAppender*, int64_t);
-    int32_t       mutable_batch_append(MutableBatch*, const void*, int32_t);
-    int32_t       mutable_batch_append_remaining_from(
-                      MutableBatch*, BatchPayloadIterator*);
-    void          indexed_batch_appender_discard_batch(
-                      IndexedBatchAppender*, int64_t);
-    uint8_t       indexed_batch_appender_id(const IndexedBatchAppender*);
-    void          indexed_batch_appender_close(IndexedBatchAppender*);
+    MmapqMutableBatch* mmapq_indexed_batch_appender_start_batch(MmapqIndexedBatchAppender*);
+    int64_t       mmapq_mutable_batch_complete(MmapqMutableBatch*);
+    int64_t       mmapq_indexed_batch_appender_commit_batch(
+                      MmapqIndexedBatchAppender*, int64_t);
+    int32_t       mmapq_mutable_batch_append(MmapqMutableBatch*, const void*, int32_t);
+    int32_t       mmapq_mutable_batch_append_remaining_from(
+                      MmapqMutableBatch*, MmapqBatchPayloadIterator*);
+    void          mmapq_indexed_batch_appender_discard_batch(
+                      MmapqIndexedBatchAppender*, int64_t);
+    uint8_t       mmapq_indexed_batch_appender_id(const MmapqIndexedBatchAppender*);
+    void          mmapq_indexed_batch_appender_close(MmapqIndexedBatchAppender*);
 
-    /* ── EntryStatus (indexed_reader.h:42) ───────────────────────────────────── */
+    /* ── MmapqEntryStatus (indexed_reader.h:42) ───────────────────────────────────── */
     typedef enum {
-        ENTRY_AVAILABLE,
-        ENTRY_END_OF_STREAM,
-        ENTRY_ARCHIVED,
-        ENTRY_ERROR,
-    } EntryStatus;
+        MMAPQ_ENTRY_AVAILABLE,
+        MMAPQ_ENTRY_END_OF_STREAM,
+        MMAPQ_ENTRY_ARCHIVED,
+        MMAPQ_ENTRY_ERROR,
+    } MmapqEntryStatus;
 
-    /* ── IndexedReader (indexed_reader.h:68) ──────────────────────────────────── */
-    typedef struct IndexedReader IndexedReader;
+    /* ── MmapqIndexedReader (indexed_reader.h:68) ──────────────────────────────────── */
+    typedef struct MmapqIndexedReader MmapqIndexedReader;
 
-    int indexed_reader_create(
-        const char*, const char*, int, uint64_t, Runtime*, IndexedReader**);
-    int indexed_queue_create_reader(IndexedQueue*, IndexedReader**);
-    ReadingContext *indexed_reader_read(
-        IndexedReader*, int64_t, ReadingContext*);
-    ReadingContext *indexed_reader_read_first(
-        IndexedReader*, ReadingContext*);
-    ReadingContext *indexed_reader_read_last(
-        IndexedReader*, ReadingContext*);
-    int64_t indexed_reader_last_index(IndexedReader*);
-    int64_t indexed_reader_start_index(IndexedReader*);
-    EntryStatus indexed_reader_entry_status(IndexedReader*, int64_t);
-    int     indexed_reader_last_error(const IndexedReader*);
-    void    indexed_reader_close(IndexedReader*);
+    int mmapq_indexed_reader_create(
+        const char*, const char*, int, uint64_t, MmapqRuntime*, MmapqIndexedReader**);
+    int mmapq_indexed_queue_create_reader(MmapqIndexedQueue*, MmapqIndexedReader**);
+    MmapqReadingContext *mmapq_indexed_reader_read(
+        MmapqIndexedReader*, int64_t, MmapqReadingContext*);
+    MmapqReadingContext *mmapq_indexed_reader_read_first(
+        MmapqIndexedReader*, MmapqReadingContext*);
+    MmapqReadingContext *mmapq_indexed_reader_read_last(
+        MmapqIndexedReader*, MmapqReadingContext*);
+    int64_t mmapq_indexed_reader_last_index(MmapqIndexedReader*);
+    int64_t mmapq_indexed_reader_start_index(MmapqIndexedReader*);
+    MmapqEntryStatus mmapq_indexed_reader_entry_status(MmapqIndexedReader*, int64_t);
+    int     mmapq_indexed_reader_last_error(const MmapqIndexedReader*);
+    void    mmapq_indexed_reader_close(MmapqIndexedReader*);
 
-    /* ── IndexedBatchReader (indexed_batch_reader.h:35) ───────────────────────── */
-    typedef struct IndexedBatchReader IndexedBatchReader;
+    /* ── MmapqIndexedBatchReader (indexed_batch_reader.h:35) ───────────────────────── */
+    typedef struct MmapqIndexedBatchReader MmapqIndexedBatchReader;
 
-    int indexed_batch_reader_create(
-        const char*, const char*, int, uint64_t, Runtime*, IndexedBatchReader**);
-    BatchReadingContext *indexed_batch_reader_read(
-        IndexedBatchReader*, int64_t, BatchReadingContext*);
-    BatchReadingContext *indexed_batch_reader_read_first(
-        IndexedBatchReader*, BatchReadingContext*);
-    BatchReadingContext *indexed_batch_reader_read_last(
-        IndexedBatchReader*, BatchReadingContext*);
-    int64_t indexed_batch_reader_last_index(IndexedBatchReader*);
-    int64_t indexed_batch_reader_start_index(IndexedBatchReader*);
-    int     indexed_batch_reader_entry_status(IndexedBatchReader*, int64_t);
-    int     indexed_batch_reader_last_error(const IndexedBatchReader*);
-    void    indexed_batch_reader_close(IndexedBatchReader*);
+    int mmapq_indexed_batch_reader_create(
+        const char*, const char*, int, uint64_t, MmapqRuntime*, MmapqIndexedBatchReader**);
+    MmapqBatchReadingContext *mmapq_indexed_batch_reader_read(
+        MmapqIndexedBatchReader*, int64_t, MmapqBatchReadingContext*);
+    MmapqBatchReadingContext *mmapq_indexed_batch_reader_read_first(
+        MmapqIndexedBatchReader*, MmapqBatchReadingContext*);
+    MmapqBatchReadingContext *mmapq_indexed_batch_reader_read_last(
+        MmapqIndexedBatchReader*, MmapqBatchReadingContext*);
+    int64_t mmapq_indexed_batch_reader_last_index(MmapqIndexedBatchReader*);
+    int64_t mmapq_indexed_batch_reader_start_index(MmapqIndexedBatchReader*);
+    int     mmapq_indexed_batch_reader_entry_status(MmapqIndexedBatchReader*, int64_t);
+    int     mmapq_indexed_batch_reader_last_error(const MmapqIndexedBatchReader*);
+    void    mmapq_indexed_batch_reader_close(MmapqIndexedBatchReader*);
 
     /* ── libc helpers for FILE* I/O ───────────────────────────────────────────── */
     void* fopen(const char*, const char*);
     int   fclose(void*);
 
     /* ── Transfer (queue_transfer.h) ──────────────────────────────────────────── */
-    typedef int (*QueueFilterFn)(int64_t, const void*, int32_t, void*);
-    typedef int (*BatchQueueFilterFn)(int64_t, int32_t, int32_t, const void*, int32_t, void*);
+    typedef int (*MmapqQueueFilterFn)(int64_t, const void*, int32_t, void*);
+    typedef int (*MmapqBatchQueueFilterFn)(int64_t, int32_t, int32_t, const void*, int32_t, void*);
 
-    #define APPENDER_ID_AUTO -1
-    typedef int32_t (*AppenderIdMapper)(uint16_t, void*);
+    #define MMAPQ_APPENDER_ID_AUTO -1
+    typedef int32_t (*MmapqAppenderIdMapper)(uint16_t, void*);
 
-    int64_t queue_transfer_export(
-        IndexedReader*, void*, int64_t, int64_t, int,
-        QueueFilterFn, QueueFilterFn, void*);
-    int64_t queue_transfer_import(
+    int64_t mmapq_queue_transfer_export(
+        MmapqIndexedReader*, void*, int64_t, int64_t, int,
+        MmapqQueueFilterFn, MmapqQueueFilterFn, void*);
+    int64_t mmapq_queue_transfer_import(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
-    int64_t queue_transfer_import_batch_stream(
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
+    int64_t mmapq_queue_transfer_import_batch_stream(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
-    int64_t queue_transfer_copy(
-        IndexedReader*, const char*, const char*,
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
+    int64_t mmapq_queue_transfer_copy(
+        MmapqIndexedReader*, const char*, const char*,
         int64_t, int64_t, int,
-        QueueFilterFn, QueueFilterFn, void*,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
-    int64_t queue_transfer_copy_batch_to_normal(
-        IndexedBatchReader*, const char*, const char*,
+        MmapqQueueFilterFn, MmapqQueueFilterFn, void*,
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
+    int64_t mmapq_queue_transfer_copy_batch_to_normal(
+        MmapqIndexedBatchReader*, const char*, const char*,
         int64_t, int64_t, int,
-        BatchQueueFilterFn, BatchQueueFilterFn, void*,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
+        MmapqBatchQueueFilterFn, MmapqBatchQueueFilterFn, void*,
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
 
     /* ── Batch transfer (batch_queue_transfer.h) ──────────────────────────────── */
-    int64_t batch_queue_transfer_export(
-        IndexedBatchReader*, void*, int64_t, int64_t, int,
-        BatchQueueFilterFn, BatchQueueFilterFn, void*);
-    int64_t batch_queue_transfer_import(
+    int64_t mmapq_batch_queue_transfer_export(
+        MmapqIndexedBatchReader*, void*, int64_t, int64_t, int,
+        MmapqBatchQueueFilterFn, MmapqBatchQueueFilterFn, void*);
+    int64_t mmapq_batch_queue_transfer_import(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
-    int64_t batch_queue_transfer_import_flat_stream(
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
+    int64_t mmapq_batch_queue_transfer_import_flat_stream(
         void*, const char*, const char*, int,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
-    int64_t batch_queue_transfer_copy(
-        IndexedBatchReader*, const char*, const char*,
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
+    int64_t mmapq_batch_queue_transfer_copy(
+        MmapqIndexedBatchReader*, const char*, const char*,
         int64_t, int64_t, int,
-        BatchQueueFilterFn, BatchQueueFilterFn, void*,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
-    int64_t batch_queue_transfer_copy_normal_to_batch(
-        IndexedReader*, const char*, const char*,
+        MmapqBatchQueueFilterFn, MmapqBatchQueueFilterFn, void*,
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
+    int64_t mmapq_batch_queue_transfer_copy_normal_to_batch(
+        MmapqIndexedReader*, const char*, const char*,
         int64_t, int64_t, int,
-        BatchQueueFilterFn, BatchQueueFilterFn, void*,
-        Runtime*, Runtime*, int,
-        AppenderIdMapper, void*, int);
+        MmapqBatchQueueFilterFn, MmapqBatchQueueFilterFn, void*,
+        MmapqRuntime*, MmapqRuntime*, int,
+        MmapqAppenderIdMapper, void*, int);
 
     /* ── Archiver (indexed_archiver.h:30,48,62,90,97,122,136,145) ────────────── */
-    typedef struct IndexedArchiver IndexedArchiver;
+    typedef struct MmapqIndexedArchiver MmapqIndexedArchiver;
 
-    int indexed_archiver_create(const char*, const char*, int, Runtime*, IndexedArchiver**);
-    int indexed_queue_create_archiver(IndexedQueue*, IndexedArchiver**);
-    int              indexed_archiver_archivable(IndexedArchiver*);
-    int              indexed_archiver_archive_up_to_index(IndexedArchiver*, int64_t);
-    int              indexed_archiver_archivable_files(
-                         IndexedArchiver*, char**, int);
-    int64_t          indexed_archiver_start_index(IndexedArchiver*);
-    int              indexed_archiver_print_summary(IndexedArchiver*, char*, int);
-    void             indexed_archiver_close(IndexedArchiver*);
+    int mmapq_indexed_archiver_create(const char*, const char*, int, MmapqRuntime*, MmapqIndexedArchiver**);
+    int mmapq_indexed_queue_create_archiver(MmapqIndexedQueue*, MmapqIndexedArchiver**);
+    int              mmapq_indexed_archiver_archivable(MmapqIndexedArchiver*);
+    int              mmapq_indexed_archiver_archive_up_to_index(MmapqIndexedArchiver*, int64_t);
+    int              mmapq_indexed_archiver_archivable_files(
+                         MmapqIndexedArchiver*, char**, int);
+    int64_t          mmapq_indexed_archiver_start_index(MmapqIndexedArchiver*);
+    int              mmapq_indexed_archiver_print_summary(MmapqIndexedArchiver*, char*, int);
+    void             mmapq_indexed_archiver_close(MmapqIndexedArchiver*);
 
     /* ── Batch archiver (indexed_batch_archiver.h) ────────────────────────────── */
-    int  indexed_batch_archiver_archivable(IndexedBatchArchiver*);
-    int  indexed_batch_archiver_archive_up_to_index(IndexedBatchArchiver*, int64_t);
-    int  indexed_batch_archiver_archivable_files(IndexedBatchArchiver*, char**, int);
-    int64_t indexed_batch_archiver_start_index(IndexedBatchArchiver*);
-    int  indexed_batch_archiver_start_offset(IndexedBatchArchiver*, uint8_t, int64_t*);
-    void indexed_batch_archiver_close(IndexedBatchArchiver*);
+    int  mmapq_indexed_batch_archiver_archivable(MmapqIndexedBatchArchiver*);
+    int  mmapq_indexed_batch_archiver_archive_up_to_index(MmapqIndexedBatchArchiver*, int64_t);
+    int  mmapq_indexed_batch_archiver_archivable_files(MmapqIndexedBatchArchiver*, char**, int);
+    int64_t mmapq_indexed_batch_archiver_start_index(MmapqIndexedBatchArchiver*);
+    int  mmapq_indexed_batch_archiver_start_offset(MmapqIndexedBatchArchiver*, uint8_t, int64_t*);
+    void mmapq_indexed_batch_archiver_close(MmapqIndexedBatchArchiver*);
 """)
 
 # ── C source files ─────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ ffi.set_source(
     #include "batch_queue_transfer.h"
     """,
     sources=_rel_sources,
-    include_dirs=[str(_rel_inc)],
+    include_dirs=[str(_rel_inc), str(_rel_src)],
     libraries=["rt", "pthread", "m"],
     extra_compile_args=["-std=gnu11", "-O2", "-D_GNU_SOURCE", "-DNDEBUG",
                         "-Wno-unused-parameter", "-Wno-attributes"],

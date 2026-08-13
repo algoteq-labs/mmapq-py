@@ -1,4 +1,4 @@
-"""IndexedAppender — single-message producer."""
+"""MmapqIndexedAppender — single-message producer."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ lib = _cffi_mod.lib
 
 def _destroy_appender(inner):
     if inner is not None:
-        lib.indexed_appender_close(inner)
+        lib.mmapq_indexed_appender_close(inner)
 
 
-class IndexedAppender:
+class MmapqIndexedAppender:
     """Single-message appender.
 
     Appends individual messages to the queue. Each append commits atomically.
@@ -25,7 +25,7 @@ class IndexedAppender:
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct IndexedAppender *", "IndexedAppender")
+        require_cdata(inner, "struct MmapqIndexedAppender *", "MmapqIndexedAppender")
         self._inner = inner
         self._runtime = None
         self._finalizer = weakref.finalize(self, _destroy_appender, inner)
@@ -37,7 +37,7 @@ class IndexedAppender:
         Returns the committed index.
         """
         buf = ffi.from_buffer(data)
-        rc = lib.indexed_appender_append(self._inner, buf, len(data))
+        rc = lib.mmapq_indexed_appender_append(self._inner, buf, len(data))
         return check_rc(rc, "append")
 
     def append_uncommitted(self, data: bytes) -> int:
@@ -48,7 +48,7 @@ class IndexedAppender:
         Returns the payload offset (for later use with commit()).
         """
         buf = ffi.from_buffer(data)
-        rc = lib.indexed_appender_append_uncommitted(self._inner, buf, len(data))
+        rc = lib.mmapq_indexed_appender_append_uncommitted(self._inner, buf, len(data))
         return check_rc(rc, "append_uncommitted")
 
     def commit(self, payload_offset: int) -> int:
@@ -58,16 +58,16 @@ class IndexedAppender:
         by crash recovery; only commit() publishes it.
         Returns the committed index.
         """
-        rc = lib.indexed_appender_commit(self._inner, payload_offset)
+        rc = lib.mmapq_indexed_appender_commit(self._inner, payload_offset)
         return check_rc(rc, "commit")
 
     def current_index(self) -> int:
         """Return the index that will be assigned to the next append."""
-        return lib.indexed_appender_current_index(self._inner)
+        return lib.mmapq_indexed_appender_current_index(self._inner)
 
     def id(self) -> int:
         """Return the appender's per-lane ID (0–255)."""
-        return lib.indexed_appender_id(self._inner)
+        return lib.mmapq_indexed_appender_id(self._inner)
 
     def close(self):
         self._finalizer.detach()

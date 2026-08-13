@@ -17,19 +17,19 @@ from ._errors import (
     check_rc,
 )
 from .types import (
-    NextMove,
-    PollResult,
+    MmapqNextMove,
+    MmapqPollResult,
     BatchPollResult,
-    BatchEntryStatus,
-    ConflictBehavior,
+    MmapqBatchEntryStatus,
+    MmapqConflictBehavior,
 )
-from .single_queue import IndexedQueue
-from .single_appender import IndexedAppender
-from .single_poller import IndexedPoller
-from .batch_queue import IndexedBatchQueue
-from .batch_poller import IndexedBatchPoller
-from .batch_appender import IndexedBatchAppender, BatchWriter
-from .reader import IndexedReader, IndexedBatchReader, EntryStatus
+from .single_queue import MmapqIndexedQueue
+from .single_appender import MmapqIndexedAppender
+from .single_poller import MmapqIndexedPoller
+from .batch_queue import MmapqIndexedBatchQueue
+from .batch_poller import MmapqIndexedBatchPoller
+from .batch_appender import MmapqIndexedBatchAppender, BatchWriter
+from .reader import MmapqIndexedReader, MmapqIndexedBatchReader, MmapqEntryStatus
 from .transfer import (
     APPENDER_ID_AUTO,
     export_queue, export_batch_queue,
@@ -37,26 +37,26 @@ from .transfer import (
     import_flat_to_batch,
     copy_queue, copy_batch_queue, copy_normal_to_batch, copy_batch_to_normal,
 )
-from .runtime import Runtime
-from .archiver import IndexedArchiver, IndexedBatchArchiver
+from .runtime import MmapqRuntime
+from .archiver import MmapqIndexedArchiver, MmapqIndexedBatchArchiver
 
 __all__ = [
-    "NextMove",
-    "PollResult",
+    "MmapqNextMove",
+    "MmapqPollResult",
     "BatchPollResult",
-    "BatchEntryStatus",
-    "ConflictBehavior",
+    "MmapqBatchEntryStatus",
+    "MmapqConflictBehavior",
     "APPENDER_ID_AUTO",
-    "IndexedQueue",
-    "IndexedAppender",
-    "IndexedPoller",
-    "IndexedBatchQueue",
-    "IndexedBatchPoller",
-    "IndexedBatchAppender",
+    "MmapqIndexedQueue",
+    "MmapqIndexedAppender",
+    "MmapqIndexedPoller",
+    "MmapqIndexedBatchQueue",
+    "MmapqIndexedBatchPoller",
+    "MmapqIndexedBatchAppender",
     "BatchWriter",
-    "IndexedReader",
-    "IndexedBatchReader",
-    "EntryStatus",
+    "MmapqIndexedReader",
+    "MmapqIndexedBatchReader",
+    "MmapqEntryStatus",
     "export_queue",
     "export_batch_queue",
     "import_queue",
@@ -67,9 +67,9 @@ __all__ = [
     "copy_batch_queue",
     "copy_normal_to_batch",
     "copy_batch_to_normal",
-    "Runtime",
-    "IndexedArchiver",
-    "IndexedBatchArchiver",
+    "MmapqRuntime",
+    "MmapqIndexedArchiver",
+    "MmapqIndexedBatchArchiver",
     "MmapqError",
     "QueueClosedError",
     "QueueCorruptError",

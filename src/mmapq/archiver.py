@@ -1,4 +1,4 @@
-"""IndexedArchiver — manage archiving of queue entries."""
+"""MmapqIndexedArchiver — manage archiving of queue entries."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ lib = _cffi_mod.lib
 
 def _destroy_archiver(inner):
     if inner is not None:
-        lib.indexed_archiver_close(inner)
+        lib.mmapq_indexed_archiver_close(inner)
 
 
-class IndexedArchiver:
+class MmapqIndexedArchiver:
     """Archiver for a single-message indexed queue.
 
     Advances the queue's start index so that old entries become
@@ -26,35 +26,35 @@ class IndexedArchiver:
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct IndexedArchiver *", "IndexedArchiver")
+        require_cdata(inner, "struct MmapqIndexedArchiver *", "MmapqIndexedArchiver")
         self._inner = inner
         self._finalizer = weakref.finalize(self, _destroy_archiver, inner)
 
     @classmethod
     def create(cls, directory: str, queue_name: str, *,
                ring_size: int = 4,
-               runtime=None) -> IndexedArchiver:
+               runtime=None) -> MmapqIndexedArchiver:
         """Create an archiver for the named queue.
 
         directory:   path to the queue data directory
         queue_name:  logical queue name
         ring_size:   number of simultaneously mapped regions
-        runtime:     optional Runtime for async region mapping (keyword-only)
+        runtime:     optional MmapqRuntime for async region mapping (keyword-only)
 
         The queue must have been created before archiving is possible.
         """
         rt = runtime._inner if runtime is not None else ffi.NULL
-        ptr = ffi.new("IndexedArchiver **")
-        rc = lib.indexed_archiver_create(
+        ptr = ffi.new("MmapqIndexedArchiver **")
+        rc = lib.mmapq_indexed_archiver_create(
             directory.encode(), queue_name.encode(),
             ring_size, rt, ptr,
         )
-        check_rc(rc, "indexed_archiver_create")
+        check_rc(rc, "mmapq_indexed_archiver_create")
         return cls(ptr[0])
 
     def archivable(self) -> bool:
         """Return True if the queue was created with archivable=True."""
-        return bool(lib.indexed_archiver_archivable(self._inner))
+        return bool(lib.mmapq_indexed_archiver_archivable(self._inner))
 
     def archive_up_to_index(self, index: int) -> None:
         """Archive all entries up to (but not including) the given index.
@@ -62,7 +62,7 @@ class IndexedArchiver:
         Advances start_index so that entries below it are inaccessible.
         Raises ValueError if the queue is not archivable.
         """
-        check_rc(lib.indexed_archiver_archive_up_to_index(self._inner, index),
+        check_rc(lib.mmapq_indexed_archiver_archive_up_to_index(self._inner, index),
                  "archive_up_to_index")
 
     def archivable_files(self) -> list[str]:
@@ -72,7 +72,7 @@ class IndexedArchiver:
         """
         max_paths = 256
         arr = ffi.new("char *[256]")
-        n = lib.indexed_archiver_archivable_files(
+        n = lib.mmapq_indexed_archiver_archivable_files(
             self._inner, arr, max_paths)
         check_rc(n, "archivable_files")
         result = []
@@ -82,7 +82,7 @@ class IndexedArchiver:
 
     def start_index(self) -> int:
         """Return the current start index (first unarchived entry)."""
-        return lib.indexed_archiver_start_index(self._inner)
+        return lib.mmapq_indexed_archiver_start_index(self._inner)
 
     def close(self) -> None:
         """Close the archiver. Idempotent."""
@@ -100,10 +100,10 @@ class IndexedArchiver:
 
 def _destroy_batch_archiver(inner):
     if inner is not None:
-        lib.indexed_batch_archiver_close(inner)
+        lib.mmapq_indexed_batch_archiver_close(inner)
 
 
-class IndexedBatchArchiver:
+class MmapqIndexedBatchArchiver:
     """Archiver for an indexed batch queue.
 
     Advances the queue's start index so that old batches become
@@ -112,24 +112,24 @@ class IndexedBatchArchiver:
     """
 
     def __init__(self, inner):
-        require_cdata(inner, "struct IndexedBatchArchiver *", "IndexedBatchArchiver")
+        require_cdata(inner, "struct MmapqIndexedBatchArchiver *", "MmapqIndexedBatchArchiver")
         self._inner = inner
         self._finalizer = weakref.finalize(self, _destroy_batch_archiver, inner)
 
     def archivable(self) -> bool:
         """Return True if the queue was created with archivable=True."""
-        return bool(lib.indexed_batch_archiver_archivable(self._inner))
+        return bool(lib.mmapq_indexed_batch_archiver_archivable(self._inner))
 
     def archive_up_to_index(self, index: int) -> None:
         """Archive all batches up to (but not including) the given index."""
-        check_rc(lib.indexed_batch_archiver_archive_up_to_index(self._inner, index),
+        check_rc(lib.mmapq_indexed_batch_archiver_archive_up_to_index(self._inner, index),
                  "archive_up_to_index")
 
     def archivable_files(self) -> list[str]:
         """Return paths to files fully covered by the archive boundary."""
         max_paths = 256
         arr = ffi.new("char *[256]")
-        n = lib.indexed_batch_archiver_archivable_files(
+        n = lib.mmapq_indexed_batch_archiver_archivable_files(
             self._inner, arr, max_paths)
         check_rc(n, "archivable_files")
         result = []
@@ -139,7 +139,7 @@ class IndexedBatchArchiver:
 
     def start_index(self) -> int:
         """Return the current start index (first unarchived batch)."""
-        return lib.indexed_batch_archiver_start_index(self._inner)
+        return lib.mmapq_indexed_batch_archiver_start_index(self._inner)
 
     def close(self) -> None:
         """Close the archiver. Idempotent."""
