@@ -12,6 +12,7 @@ If they pass, the unknown is resolved as "no leak" and the tests remain
 as a guard.
 """
 
+import contextlib
 import gc
 import os
 import resource
@@ -20,10 +21,46 @@ import tempfile
 import unittest
 
 from mmapq import IndexedBatchPoller, IndexedPoller, IndexedBatchQueue, IndexedQueue
+from mmapq import batch_poller as _batch_poller_mod
+from mmapq import single_poller as _single_poller_mod
 
 
 def _count_type(tp):
     return sum(1 for o in gc.get_objects() if isinstance(o, tp))
+
+
+class _DestroyCounter:
+    """Count C-side teardowns without changing production code.
+
+    ``__init__`` reads ``_destroy_poller`` as a module global when it
+    registers the finalizer, so patching the module attribute *before*
+    the pollers are constructed causes the counted wrapper to be the
+    registered callback. The wrapper still performs the real teardown.
+
+    Collecting the Python object is NOT the same event as releasing the C
+    poller: a finalizer that is detached, replaced, or never registered
+    leaves 10,000 C pollers alive while every Python-side signal (live
+    count, ``gc.garbage``, RSS) stays clean. This counter is what makes
+    the test fail in that case.
+    """
+
+    def __init__(self, module, attr):
+        self._module = module
+        self._attr = attr
+        self._real = getattr(module, attr)
+        self.count = 0
+
+    def __call__(self, inner):
+        self.count += 1
+        return self._real(inner)
+
+    @contextlib.contextmanager
+    def patched(self):
+        setattr(self._module, self._attr, self)
+        try:
+            yield self
+        finally:
+            setattr(self._module, self._attr, self._real)
 
 
 class TestSinglePollerLifecycle(unittest.TestCase):
@@ -43,13 +80,23 @@ class TestSinglePollerLifecycle(unittest.TestCase):
         baseline = _count_type(IndexedPoller)
         self.assertLessEqual(baseline, 0, "baseline should have no live pollers")
 
-        pollers = [self.q.create_poller() for _ in range(10_000)]
-        self.assertEqual(_count_type(IndexedPoller), 10_000)
-        del pollers
+        counter = _DestroyCounter(_single_poller_mod, "_destroy_poller")
+        with counter.patched():
+            pollers = [self.q.create_poller() for _ in range(10_000)]
+            self.assertEqual(_count_type(IndexedPoller), 10_000)
+            self.assertEqual(counter.count, 0, "no teardown before drop")
+            del pollers
 
-        gc.collect()
+            gc.collect()
+
         # Primary signals.
         self.assertEqual(len(gc.garbage), 0, "unreachable cycles must not accumulate")
+        # The C poller must actually be closed, not merely made unreachable.
+        self.assertEqual(
+            counter.count,
+            10_000,
+            f"only {counter.count} of 10,000 C pollers were closed on collection",
+        )
         after = _count_type(IndexedPoller)
         # Generous threshold: a 10k leak is dramatic, not marginal. Allow a
         # tiny transient slack for interpreter bookkeeping.
@@ -79,12 +126,21 @@ class TestBatchPollerLifecycle(unittest.TestCase):
         baseline = _count_type(IndexedBatchPoller)
         self.assertLessEqual(baseline, 0, "baseline should have no live pollers")
 
-        pollers = [self.q.create_poller() for _ in range(10_000)]
-        self.assertEqual(_count_type(IndexedBatchPoller), 10_000)
-        del pollers
+        counter = _DestroyCounter(_batch_poller_mod, "_destroy_batch_poller")
+        with counter.patched():
+            pollers = [self.q.create_poller() for _ in range(10_000)]
+            self.assertEqual(_count_type(IndexedBatchPoller), 10_000)
+            self.assertEqual(counter.count, 0, "no teardown before drop")
+            del pollers
 
-        gc.collect()
+            gc.collect()
+
         self.assertEqual(len(gc.garbage), 0, "unreachable cycles must not accumulate")
+        self.assertEqual(
+            counter.count,
+            10_000,
+            f"only {counter.count} of 10,000 C batch pollers were closed on collection",
+        )
         after = _count_type(IndexedBatchPoller)
         self.assertLess(
             after, 100, f"{after} of 10,000 batch pollers leaked (not GC-collectible)"
