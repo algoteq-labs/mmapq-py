@@ -57,7 +57,7 @@ The two upstream rules restated because violating them is unrecoverable:
 
 ## Testing rules
 
-- Framework: `unittest`, run via `python3 -m unittest tests.test_batch_queue -v`
+- Framework: `unittest`, run via `python3 -m unittest tests.test_queue -v`
   (or pytest over the same file). **A test not shown by `-v` output does not
   exist** — after adding tests, verify by name in runner output and report
   the new total. Test classes follow the existing pattern: `setUp` makes a

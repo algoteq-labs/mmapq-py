@@ -42,7 +42,7 @@ N's acceptance passes. Report per phase.
 - **Style:** match existing modules exactly (`from __future__ import
   annotations`, type hints, docstrings stating contracts). No
   reformatting of existing code beyond this spec's changes.
-- **Tests:** `unittest`, in `tests/test_batch_queue.py` following the
+- **Tests:** `unittest`, in `tests/test_queue.py` following the
   existing class pattern (`setUp` temp dir, `tearDown` rmtree). A test not
   visible in `-v` runner output does not exist. Every phase's report
   quotes the new `-v` lines and the new total.

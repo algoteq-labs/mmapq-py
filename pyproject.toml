@@ -33,3 +33,10 @@ BugTracker = "https://github.com/anton-anufriev/mmapq-py/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
