@@ -6,27 +6,32 @@ import enum
 
 
 class NextMove(enum.IntEnum):
-    """Direction returned by the batch handler to control cursor movement."""
+    """Direction returned by a poll handler to control cursor movement.
+
+    Works for both single-message and batch pollers.  The handler returns
+    one of these to tell the poller what to do with the cursor after the
+    current entry (or batch).
+    """
 
     ADVANCE = 0
-    """Move cursor forward to the next batch."""
+    """Move cursor forward to the next entry (or batch)."""
     STOP = 1
-    """Hold cursor at the current batch."""
+    """Hold cursor at the current entry (or batch)."""
     RETREAT = 2
-    """Move cursor backward to the previous batch."""
+    """Move cursor backward to the previous entry (or batch)."""
 
 
 class PollResult(enum.IntEnum):
     """Result of a single poll() call."""
 
     END_OF_STREAM = 0
-    """No batch at the current index; retry on next poll()."""
+    """No entry (or batch) at the current index; retry on next poll()."""
     ADVANCED = 1
-    """Batch delivered and cursor moved forward."""
+    """Entry (or batch) delivered and cursor moved forward."""
     STOPPED = 2
-    """Batch delivered and cursor held (handler returned STOP)."""
+    """Entry (or batch) delivered and cursor held (handler returned STOP)."""
     RETREATED = 3
-    """Batch delivered and cursor moved backward."""
+    """Entry (or batch) delivered and cursor moved backward."""
     ARCHIVED = 4
     """Current index is below the queue's start index (archived)."""
     ERROR = 5

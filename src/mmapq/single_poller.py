@@ -65,11 +65,11 @@ class IndexedPoller:
         self._current_handler = handler
         self._pending_exc = None
         try:
-            result = ffi.cast("int", lib.mmapq_indexed_poller_poll(
+            result = lib.mmapq_indexed_poller_poll(
                 self._inner,
                 _c_trampoline,
                 self._handle,
-            ))
+            )
             if self._pending_exc is not None:
                 exc = self._pending_exc
                 self._pending_exc = None
