@@ -203,8 +203,31 @@ fi
 # Format: header_path  C_type_name  C_prefix  Python_class  types_py_path
 check_enum "$C_INCLUDE/poller.h"                "MmapqNextMove"         "MMAPQ_NEXT_"         "NextMove"         "$TYPES_PY"
 check_enum "$C_INCLUDE/poller.h"                "MmapqPollResult"       "MMAPQ_POLL_"         "PollResult"       "$TYPES_PY"
+check_enum "$C_INCLUDE/indexed_reader.h"        "MmapqEntryStatus"      "MMAPQ_ENTRY_"        "EntryStatus"      "$TYPES_PY"
 check_enum "$C_INCLUDE/indexed_batch_reader.h"  "MmapqBatchEntryStatus" "MMAPQ_BATCH_ENTRY_"  "BatchEntryStatus" "$TYPES_PY"
 check_enum "$C_INCLUDE/queue_transfer.h"        "MmapqConflictBehavior" "MMAPQ_CONFLICT_"     "ConflictBehavior" "$TYPES_PY"
+
+if [ "$HAD_ERROR" -ne 0 ]; then
+    echo "FAIL: enum sync check found mismatches"
+    exit 1
+fi
+
+# ── Completeness check ────────────────────────────────────────────────────
+# Verify every enum.IntEnum subclass in src/mmapq/ is covered by a check_enum
+# invocation above. This closes the class rather than the instance (P1).
+CHECKED_ENUMS="NextMove PollResult EntryStatus BatchEntryStatus ConflictBehavior"
+ALL_ENUMS=$(grep -rn 'class .*(enum\.IntEnum)' src/mmapq/ 2>/dev/null \
+    | sed 's/.*class \([A-Za-z0-9_]*\)(enum\.IntEnum).*/\1/' | sort -u)
+for cls in $ALL_ENUMS; do
+    found=0
+    for checked in $CHECKED_ENUMS; do
+        if [ "$cls" = "$checked" ]; then found=1; break; fi
+    done
+    if [ "$found" -eq 0 ]; then
+        echo "ERROR: enum $cls is defined in src/mmapq/ but not covered by check_enum"
+        HAD_ERROR=1
+    fi
+done
 
 if [ "$HAD_ERROR" -ne 0 ]; then
     echo "FAIL: enum sync check found mismatches"

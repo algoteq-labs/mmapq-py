@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import enum
 import weakref
 from typing import Optional
 
 from . import _cffi as _cffi_mod
 from ._cdata import require_cdata
 from ._errors import MmapqError, QueueClosedError, QueueCorruptError, check_rc
+from .types import EntryStatus  # noqa: F401  (re-exported for compatibility)
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
@@ -22,19 +22,6 @@ def _destroy_reader(inner):
 def _destroy_batch_reader(inner):
     if inner is not None:
         lib.mmapq_indexed_batch_reader_close(inner)
-
-
-class EntryStatus(enum.IntEnum):
-    """Availability of a queue entry at a given index."""
-
-    AVAILABLE = 0
-    """The entry exists and is readable."""
-    END_OF_STREAM = 1
-    """No entry has been committed at this index yet."""
-    ARCHIVED = 2
-    """The entry was archived and is no longer accessible."""
-    ERROR = 3
-    """A mapping timeout or I/O error occurred."""
 
 
 class IndexedReader:

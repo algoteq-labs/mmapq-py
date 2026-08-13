@@ -39,6 +39,19 @@ class PollResult(enum.IntEnum):
 BatchPollResult = PollResult
 
 
+class EntryStatus(enum.IntEnum):
+    """Availability of a queue entry at a given index."""
+
+    AVAILABLE = 0
+    """The entry exists and is readable."""
+    END_OF_STREAM = 1
+    """No entry has been committed at this index yet."""
+    ARCHIVED = 2
+    """The entry was archived and is no longer accessible."""
+    ERROR = 3
+    """A mapping timeout or I/O error occurred."""
+
+
 class BatchEntryStatus(enum.IntEnum):
     """Availability of a batch entry at a given index."""
 
