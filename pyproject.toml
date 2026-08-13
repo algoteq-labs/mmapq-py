@@ -7,7 +7,7 @@ name = "mmapq"
 version = "0.1.0"
 description = "Python bindings for mmapq — low-latency memory-mapped queue"
 requires-python = ">=3.10"
-license = { text = "BSD-2-Clause" }
+license = "BSD-2-Clause"
 authors = [
     { name = "Anton Anufriev" },
 ]
@@ -16,7 +16,6 @@ keywords = ["mmap", "shared-memory", "queue", "lock-free", "high-performance"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: BSD License",
     "Programming Language :: C",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

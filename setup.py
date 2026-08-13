@@ -308,9 +308,18 @@ ffi.cdef("""
 import glob  # noqa: F811
 
 _script_dir = Path(__file__).resolve().parent
-_c_dir = _script_dir.parent / "mmapq"
-if not _c_dir.exists():
-    _c_dir = _script_dir / "c"
+# Prefer the vendored c/ submodule (shipped in the sdist, always self-contained),
+# falling back to the sibling mmapq/ directory in the development workspace.
+# Verify the src/ subtree exists, not just the parent dir — a stray sibling dir
+# with no C sources must not shadow the vendored copy.
+_c_dir = _script_dir / "c"
+if not (_c_dir / "src").exists():
+    _c_dir = _script_dir.parent / "mmapq"
+if not (_c_dir / "src").exists():
+    raise SystemExit(
+        "ERROR: no C sources found. Check out the mmapq c/ submodule "
+        "(git submodule update --init) or place the mmapq/ sibling next to setup.py."
+    )
 
 _c_src_dir = _c_dir / "src"
 _c_include_dir = _c_dir / "include"
