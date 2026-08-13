@@ -7,7 +7,30 @@ name = "mmapq"
 version = "0.1.0"
 description = "Python bindings for mmapq — low-latency memory-mapped queue"
 requires-python = ">=3.10"
-dependencies = []
+license = { text = "BSD-2-Clause" }
+authors = [
+    { name = "Anton Anufriev" },
+]
+readme = "README.md"
+keywords = ["mmap", "shared-memory", "queue", "lock-free", "high-performance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: C",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Distributed Computing",
+]
+dependencies = ["cffi"]
+
+[project.urls]
+Homepage = "https://github.com/anton-anufriev/mmapq"
+Source = "https://github.com/anton-anufriev/mmapq-py"
+BugTracker = "https://github.com/anton-anufriev/mmapq-py/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

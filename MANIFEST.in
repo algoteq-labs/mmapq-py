@@ -1,0 +1,5 @@
+recursive-include c/src *.c
+recursive-include c/include *.h
+include LICENSE README.md
+prune c/test
+prune c/doc

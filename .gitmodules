@@ -1,0 +1,4 @@
+[submodule "c"]
+	path = c
+	url = ../mmapq.git
+	branch = main
