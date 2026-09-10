@@ -7,7 +7,7 @@ name = "mmapq"
 version = "0.1.0"
 description = "Python bindings for mmapq — low-latency memory-mapped queue"
 requires-python = ">=3.10"
-license = {text = "BSD-2-Clause"}
+license = {text = "BSD-3-Clause"}
 authors = [
     { name = "Anton Anufriev" },
 ]
@@ -27,9 +27,9 @@ classifiers = [
 dependencies = ["cffi"]
 
 [project.urls]
-Homepage = "https://github.com/anton-anufriev/mmapq"
-Source = "https://github.com/anton-anufriev/mmapq-py"
-BugTracker = "https://github.com/anton-anufriev/mmapq-py/issues"
+Homepage = "https://github.com/algoteq-labs/mmapq"
+Source = "https://github.com/algoteq-labs/mmapq-py"
+BugTracker = "https://github.com/algoteq-labs/mmapq-py/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

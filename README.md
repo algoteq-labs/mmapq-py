@@ -1,8 +1,8 @@
 # mmapq
 
-[![License: BSD-2-Clause](https://img.shields.io/badge/License-BSD_2--Clause-blue.svg)](LICENSE)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 
-**Python bindings for [mmapq](https://github.com/anton-anufriev/mmapq)** — a persistent,
+**Python bindings for [mmapq](https://github.com/algoteq-labs/mmapq)** — a persistent,
 indexed, replayable inter-process queue backed by memory-mapped files. No
 broker, no daemon; the queue is just files.
 
@@ -23,7 +23,7 @@ Copy a queue directory from production to a laptop and re-read it from index
 zero — the same operation that drives recovery and replication is also how
 you debug, backtest, and audit. "What did command K do" is a single indexed
 read from a Python script. `doc/event-sourcing-guide.md` in the
-[mmapq](https://github.com/anton-anufriev/mmapq) repository describes the
+[mmapq](https://github.com/algoteq-labs/mmapq) repository describes the
 full pattern; `doc/feature-matrix.md` gives exact coverage across C, Rust,
 and Python.
 
@@ -391,7 +391,7 @@ event-sourcing architecture follows
 
 ## License
 
-BSD 2-Clause — see [LICENSE](LICENSE).
+BSD 3-Clause — see [LICENSE](LICENSE).
 
 ## Platform
 

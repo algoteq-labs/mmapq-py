@@ -33,3 +33,6 @@ venv/
 # Benchmark queue directories
 bench_queues/
 test_queues/
+
+# Code graph (codeloom)
+.codeloom/
