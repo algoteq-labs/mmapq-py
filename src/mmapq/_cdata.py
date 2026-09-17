@@ -2,8 +2,15 @@
 from __future__ import annotations
 
 from . import _cffi as _cffi_mod
+from ._errors import QueueClosedError
 
 ffi = _cffi_mod.ffi
+
+
+def require_open(inner):
+    if inner is None or inner == ffi.NULL:
+        raise QueueClosedError("queue or participant is closed")
+    return inner
 
 
 def require_cdata(inner, expected_cname, clsname):

@@ -6,7 +6,7 @@ import weakref
 from typing import Optional
 
 from . import _cffi as _cffi_mod
-from ._cdata import require_cdata
+from ._cdata import require_cdata, require_open
 from ._errors import MmapqError, QueueClosedError, QueueCorruptError, check_rc
 from .types import EntryStatus  # noqa: F401  (re-exported for compatibility)
 
@@ -54,7 +54,7 @@ class IndexedReader:
         The queue does not need to exist at creation time — reads on a
         non-existent queue return None (END_OF_STREAM).
         """
-        rt = runtime._inner if runtime is not None else ffi.NULL
+        rt = require_open(runtime._inner) if runtime is not None else ffi.NULL
         ptr = ffi.new("MmapqIndexedReader **")
         rc = lib.mmapq_indexed_reader_create(
             directory.encode(), queue_name.encode(),
@@ -216,7 +216,7 @@ class IndexedBatchReader:
         timeout_ns:  region-mapping timeout in nanoseconds
         runtime:     optional Runtime for async region mapping (keyword-only)
         """
-        rt = runtime._inner if runtime is not None else ffi.NULL
+        rt = require_open(runtime._inner) if runtime is not None else ffi.NULL
         ptr = ffi.new("MmapqIndexedBatchReader **")
         rc = lib.mmapq_indexed_batch_reader_create(
             directory.encode(), queue_name.encode(),
@@ -303,7 +303,12 @@ class IndexedBatchReader:
         status = self._ctx.status
         if status == BatchEntryStatus.AVAILABLE:
             self._last_read_valid = True
-            return iter_batch_messages(self._ctx)
+            messages = iter_batch_messages(self._ctx)
+            error = lib.mmapq_indexed_batch_reader_last_error(self._inner)
+            if error < 0:
+                self._last_read_valid = False
+                check_rc(error, "read_batch_messages")
+            return messages
         else:
             self._last_read_valid = False
         if status in (BatchEntryStatus.END_OF_STREAM,

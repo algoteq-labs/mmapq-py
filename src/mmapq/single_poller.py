@@ -9,12 +9,12 @@ from __future__ import annotations
 import weakref
 
 from . import _cffi as _cffi_mod
-from ._cdata import require_cdata
+from ._cdata import require_cdata, require_open
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 from .types import NextMove, PollResult
-from ._errors import QueueCorruptError, check_rc
+from ._errors import MmapqError, QueueCorruptError, check_rc
 
 
 def _destroy_poller(inner):
@@ -32,8 +32,8 @@ def _c_trampoline(index, appender_id, data_ptr, length, user_data):
         return NextMove.STOP
     try:
         data = bytes(ffi.buffer(data_ptr, length))
-        return handler(index, appender_id, data)
-    except Exception as e:
+        return NextMove(handler(index, appender_id, data))
+    except BaseException as e:
         poller._pending_exc = e
         return NextMove.STOP
 
@@ -62,11 +62,16 @@ class IndexedPoller:
         Returns a PollResult describing what happened.
         Raises the handler's exception if one was raised during delivery.
         """
+        require_open(self._inner)
+        if self._current_handler is not None:
+            raise MmapqError("poll is already active")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
         self._current_handler = handler
         self._pending_exc = None
         try:
             result = lib.mmapq_indexed_poller_poll(
-                self._inner,
+                require_open(self._inner),
                 _c_trampoline,
                 self._handle,
             )
@@ -75,7 +80,7 @@ class IndexedPoller:
                 self._pending_exc = None
                 raise exc
             if result == PollResult.ERROR:
-                check_rc(lib.mmapq_indexed_poller_last_error(self._inner), "mmapq_indexed_poller_poll")
+                check_rc(lib.mmapq_indexed_poller_last_error(require_open(self._inner)), "mmapq_indexed_poller_poll")
             if result == PollResult.CORRUPT:
                 raise QueueCorruptError("poll: committed payload data is corrupt")
             return PollResult(result)
@@ -83,27 +88,29 @@ class IndexedPoller:
             self._current_handler = None
 
     def move_to_index(self, index: int) -> bool:
-        return bool(lib.mmapq_indexed_poller_move_to_index(self._inner, index))
+        return bool(lib.mmapq_indexed_poller_move_to_index(require_open(self._inner), index))
 
     def move_to_end(self) -> bool:
-        return bool(lib.mmapq_indexed_poller_move_to_end(self._inner))
+        return bool(lib.mmapq_indexed_poller_move_to_end(require_open(self._inner)))
 
     def move_to_last(self) -> bool:
-        return bool(lib.mmapq_indexed_poller_move_to_last(self._inner))
+        return bool(lib.mmapq_indexed_poller_move_to_last(require_open(self._inner)))
 
     def move_to_start(self) -> bool:
-        return bool(lib.mmapq_indexed_poller_move_to_start(self._inner))
+        return bool(lib.mmapq_indexed_poller_move_to_start(require_open(self._inner)))
 
     def current_index(self) -> int:
-        return lib.mmapq_indexed_poller_current_index(self._inner)
+        return lib.mmapq_indexed_poller_current_index(require_open(self._inner))
 
     def start_index(self) -> int:
-        return lib.mmapq_indexed_poller_start_index(self._inner)
+        return lib.mmapq_indexed_poller_start_index(require_open(self._inner))
 
     def exists(self, index: int) -> bool:
-        return bool(lib.mmapq_indexed_poller_exists(self._inner, index))
+        return bool(lib.mmapq_indexed_poller_exists(require_open(self._inner), index))
 
     def close(self):
+        if self._current_handler is not None:
+            raise MmapqError("cannot close a poller during its handler")
         if self._inner is not None:
             self._finalizer.detach()
             lib.mmapq_indexed_poller_close(self._inner)

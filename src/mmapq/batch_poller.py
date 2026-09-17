@@ -16,12 +16,12 @@ import weakref
 from typing import Callable
 
 from . import _cffi as _cffi_mod
-from ._cdata import require_cdata
+from ._cdata import require_cdata, require_open
 
 ffi = _cffi_mod.ffi
 lib = _cffi_mod.lib
 from .types import NextMove, PollResult
-from ._errors import QueueCorruptError, check_rc
+from ._errors import MmapqError, QueueCorruptError, check_rc
 
 
 def iter_batch_messages(ctx: "CData") -> list[bytes]:
@@ -58,8 +58,10 @@ def _c_trampoline(batch_index, ctx_ptr, user_data):
         return NextMove.STOP
     try:
         messages = iter_batch_messages(ctx_ptr)
-        return handler(batch_index, messages)
-    except Exception as e:
+        if len(messages) != ctx_ptr.message_count:
+            return NextMove.STOP
+        return NextMove(handler(batch_index, messages))
+    except BaseException as e:
         poller._pending_exc = e
         return NextMove.STOP
 
@@ -89,11 +91,16 @@ class IndexedBatchPoller:
         Returns a PollResult describing what happened.
         Raises the handler's exception if one was raised during delivery.
         """
+        require_open(self._inner)
+        if self._current_handler is not None:
+            raise MmapqError("poll is already active")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
         self._current_handler = handler
         self._pending_exc = None
         try:
             result = lib.mmapq_indexed_batch_poller_poll(
-                self._inner,
+                require_open(self._inner),
                 _c_trampoline,
                 self._handle,
             )
@@ -102,7 +109,7 @@ class IndexedBatchPoller:
                 self._pending_exc = None
                 raise exc
             if result == PollResult.ERROR:
-                check_rc(lib.mmapq_indexed_batch_poller_last_error(self._inner), "mmapq_indexed_batch_poller_poll")
+                check_rc(lib.mmapq_indexed_batch_poller_last_error(require_open(self._inner)), "mmapq_indexed_batch_poller_poll")
             if result == PollResult.CORRUPT:
                 raise QueueCorruptError("batch poll: committed batch payload is corrupt")
             return PollResult(result)
@@ -110,27 +117,29 @@ class IndexedBatchPoller:
             self._current_handler = None
 
     def move_to_index(self, index: int) -> bool:
-        return bool(lib.mmapq_indexed_batch_poller_move_to_index(self._inner, index))
+        return bool(lib.mmapq_indexed_batch_poller_move_to_index(require_open(self._inner), index))
 
     def move_to_end(self) -> bool:
-        return bool(lib.mmapq_indexed_batch_poller_move_to_end(self._inner))
+        return bool(lib.mmapq_indexed_batch_poller_move_to_end(require_open(self._inner)))
 
     def move_to_last_existing_batch(self) -> bool:
-        return bool(lib.mmapq_indexed_batch_poller_move_to_last_existing_batch(self._inner))
+        return bool(lib.mmapq_indexed_batch_poller_move_to_last_existing_batch(require_open(self._inner)))
 
     def move_to_start(self) -> bool:
-        return bool(lib.mmapq_indexed_batch_poller_move_to_start(self._inner))
+        return bool(lib.mmapq_indexed_batch_poller_move_to_start(require_open(self._inner)))
 
     def current_batch_index(self) -> int:
-        return lib.mmapq_indexed_batch_poller_current_batch_index(self._inner)
+        return lib.mmapq_indexed_batch_poller_current_batch_index(require_open(self._inner))
 
     def start_index(self) -> int:
-        return lib.mmapq_indexed_batch_poller_start_index(self._inner)
+        return lib.mmapq_indexed_batch_poller_start_index(require_open(self._inner))
 
     def exists(self, batch_index: int) -> bool:
-        return bool(lib.mmapq_indexed_batch_poller_exists(self._inner, batch_index))
+        return bool(lib.mmapq_indexed_batch_poller_exists(require_open(self._inner), batch_index))
 
     def close(self):
+        if self._current_handler is not None:
+            raise MmapqError("cannot close a poller during its handler")
         if self._inner is not None:
             self._finalizer.detach()
             lib.mmapq_indexed_batch_poller_close(self._inner)

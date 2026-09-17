@@ -6,6 +6,7 @@ Filtering is not supported in v1 — all entries are transferred.
 
 from __future__ import annotations
 
+import os
 from typing import Callable, Optional
 
 from . import _cffi as _cffi_mod
@@ -66,7 +67,7 @@ def export_queue(directory: str, queue_name: str, dest_path: str, *,
     """Export entries from a queue to a portable flat stream file.
 
     Raises:
-        OSError: cannot open destination file for writing.
+        OSError: cannot open or finish writing the destination file.
     """
     reader = IndexedReader.create(directory, queue_name)
     try:
@@ -83,9 +84,11 @@ def export_queue(directory: str, queue_name: str, dest_path: str, *,
                 from_index, to_index, _mode(preserve),
                 ffi.NULL, ffi.NULL, ffi.NULL,
             )
-            return check_rc(n, "export_queue")
         finally:
-            lib.fclose(dest)
+            close_result = lib.fclose(dest)
+        if close_result != 0:
+            raise OSError(ffi.errno, os.strerror(ffi.errno), dest_path)
+        return check_rc(n, "export_queue")
     finally:
         reader.close()
 
@@ -182,7 +185,7 @@ def export_batch_queue(directory: str, queue_name: str, dest_path: str, *,
     """Export batches from a batch queue to a portable batch stream file.
 
     Raises:
-        OSError: cannot open destination file for writing.
+        OSError: cannot open or finish writing the destination file.
     """
     reader = IndexedBatchReader.create(directory, queue_name)
     try:
@@ -199,9 +202,11 @@ def export_batch_queue(directory: str, queue_name: str, dest_path: str, *,
                 from_index, to_index, _mode(preserve),
                 ffi.NULL, ffi.NULL, ffi.NULL,
             )
-            return check_rc(n, "export_batch_queue")
         finally:
-            lib.fclose(dest)
+            close_result = lib.fclose(dest)
+        if close_result != 0:
+            raise OSError(ffi.errno, os.strerror(ffi.errno), dest_path)
+        return check_rc(n, "export_batch_queue")
     finally:
         reader.close()
 

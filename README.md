@@ -29,55 +29,77 @@ and Python.
 
 ## Quick start
 
+Use a directory on a persistent filesystem. The examples create `./data`;
+`/dev/shm` is volatile memory and `/tmp` may be cleared on reboot. Both are
+useful for disposable tests and benchmarks, not retained queue history.
+
+Commit publishes messages to readers; it does not flush them to stable storage.
+mmapq relies on OS writeback and does not guarantee durability through power
+loss. Consumer positions are application state: save the last processed index
+and seek explicitly when resuming. Export files also need an appropriate
+storage and backup policy.
+
 ### Single-message queue
 
 ```python
+from pathlib import Path
 from mmapq import IndexedQueue, NextMove
 
-q = IndexedQueue.create("/dev/shm", "my_queue")
-
-appender = q.create_appender()
-appender.append(b"hello world")        # committed atomically
+Path("./data").mkdir(exist_ok=True)
 
 def handler(index, appender_id, data):
     print(f"[{index}] {data!r}")
     return NextMove.ADVANCE
 
-poller = q.create_poller()
-poller.poll(handler)
+with IndexedQueue.create("./data", "my_queue") as queue:
+    with queue.create_appender() as appender:
+        index = appender.append(b"hello world")
+    with queue.create_poller() as poller:
+        poller.move_to_index(index)
+        poller.poll(handler)
 ```
 
 ### Batch queue (atomic multi-message commit)
 
 ```python
-from mmapq import IndexedBatchQueue, NextMove
+from pathlib import Path
+from mmapq import IndexedBatchQueue
 
-q = IndexedBatchQueue.create("/dev/shm", "events")
-appender = q.create_appender()
-
-with appender.start_batch() as batch:      # context manager = transaction
-    batch.append(b"event 1")
-    batch.append(b"event 2")
-    batch.append(b"event 3")
-# leaving the block discards the batch — call batch.commit() to persist;
-# an exception inside the block also discards it, so uncommitted data
-# never becomes visible. This is the command/event rollback semantics.
+Path("./data").mkdir(exist_ok=True)
+with IndexedBatchQueue.create("./data", "events") as queue:
+    with queue.create_appender() as appender:
+        with appender.start_batch() as batch:
+            batch.append(b"event 1")
+            batch.append(b"event 2")
+            batch.append(b"event 3")
+            index = batch.commit()
+    with queue.create_reader() as reader:
+        assert reader.read(index) == [b"event 1", b"event 2", b"event 3"]
 ```
+
+Exiting a batch block without `commit()` discards that batch, including when
+an exception leaves the block before commit. An exception after a successful
+commit does not undo published messages. Use one active batch per appender;
+the writer cannot be reused after commit, rollback, or appender close.
 
 ### Reading and replay (random access)
 
+Reopen the batch queue written above, using the matching batch reader and
+export function:
+
 ```python
-from mmapq import IndexedReader, export_queue
+from mmapq import IndexedBatchReader, export_batch_queue
 
-reader = IndexedReader.create("/dev/shm", "events")
-first = reader.read_first()              # bytes | None
-last  = reader.read_last()
-msg   = reader.read(42)                  # read any committed index
-print(reader.last_index())
+with IndexedBatchReader.create("./data", "events") as reader:
+    first = reader.read_first()
+    last = reader.read_last()
+    assert last == [b"event 1", b"event 2", b"event 3"]
+    print(reader.last_index())
 
-# Export the durable stream for long-term storage or offline analysis:
-export_queue("/dev/shm", "events", "/data/events-2026-07.mmapq")
+export_batch_queue("./data", "events", "./data/events.mmapq")
 ```
+
+For single-message queues use `IndexedReader` and `export_queue` instead.
 
 ## A note on validation and safety
 
@@ -251,7 +273,7 @@ region mapping, pass a `Runtime`:
 from mmapq import Runtime, IndexedQueue
 
 rt = Runtime.region_mapper()
-q = IndexedQueue.create("/dev/shm", "rt_queue", runtime=rt)
+q = IndexedQueue.create("./data", "rt_queue", runtime=rt)
 
 # Runtime is kept alive by the queue — safe to drop the local reference
 del rt
@@ -265,10 +287,10 @@ entries become inaccessible and their backing files can be safely deleted:
 ```python
 from mmapq import IndexedArchiver, IndexedQueue
 
-q = IndexedQueue.create("/dev/shm", "arch_q", archivable=True)
+q = IndexedQueue.create("./data", "arch_q", archivable=True)
 # ... produce messages ...
 
-arch = IndexedArchiver.create("/dev/shm", "arch_q")
+arch = IndexedArchiver.create("./data", "arch_q")
 arch.archive_up_to_index(1000)          # archive entries < 1000
 files = arch.archivable_files()         # paths safe to delete
 for path in files:
@@ -291,28 +313,28 @@ from mmapq import (
 )
 
 # Export a queue to a portable flat file (single-message)
-n = export_queue("/dev/shm", "src", "/tmp/export.bin")
+n = export_queue("./data", "src", "./data/export.bin")
 
 # Import flat file into a new queue (allow_append=True appends to existing)
-n = import_queue("/tmp/export.bin", "/dev/shm", "restored")
-n = import_queue("/tmp/export.bin", "/dev/shm", "restored", allow_append=True)
+n = import_queue("./data/export.bin", "./data", "restored")
+n = import_queue("./data/export.bin", "./data", "restored", allow_append=True)
 
 # Copy queue files directly (avoids intermediate export file)
-n = copy_queue("/dev/shm", "src", "/dev/shm", "copy")
+n = copy_queue("./data", "src", "./data", "copy")
 
 # Preserve index space (start_index, appender IDs)
-n = export_queue("/dev/shm", "src", "/tmp/preserve.bin", preserve=True)
-n = import_queue("/tmp/preserve.bin", "/dev/shm", "preserved", preserve=True)
+n = export_queue("./data", "src", "./data/preserve.bin", preserve=True)
+n = import_queue("./data/preserve.bin", "./data", "preserved", preserve=True)
 
 # Batch queue transfers
-n = export_batch_queue("/dev/shm", "batch_src", "/tmp/batch_export.bin")
-n = import_batch_queue("/tmp/batch_export.bin", "/dev/shm", "batch_dst")
-n = import_batch_stream("/tmp/batch_export.bin", "/dev/shm", "flat_stream")
+n = export_batch_queue("./data", "batch_src", "./data/batch_export.bin")
+n = import_batch_queue("./data/batch_export.bin", "./data", "batch_dst")
+n = import_batch_stream("./data/batch_export.bin", "./data", "flat_stream")
 
 # Cross-type conversions (flat to batch, batch to flat)
-n = import_flat_to_batch("/tmp/export.bin", "/dev/shm", "batch_queue")
-n = copy_normal_to_batch("/dev/shm", "flat_src", "/dev/shm", "batch_dst")
-n = copy_batch_to_normal("/dev/shm", "batch_src", "/dev/shm", "flat_dst")
+n = import_flat_to_batch("./data/export.bin", "./data", "batch_queue")
+n = copy_normal_to_batch("./data", "flat_src", "./data", "batch_dst")
+n = copy_batch_to_normal("./data", "batch_src", "./data", "flat_dst")
 
 # All copy/import functions accept:
 #   allow_append=True    — append to existing queue instead of refusing
