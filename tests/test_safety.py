@@ -11,6 +11,7 @@ from mmapq import copy_batch_queue, copy_batch_to_normal
 from mmapq import QueueCorruptError
 from mmapq import Runtime, IndexedReader, IndexedBatchReader, IndexedArchiver
 from mmapq import batch_appender
+from mmapq import transfer
 
 
 class TestSafety(unittest.TestCase):
@@ -123,6 +124,72 @@ class TestSafety(unittest.TestCase):
             with self.subTest(queue=queue_type.__name__):
                 with self.assertRaises(OSError):
                     export(self.directory.name, queue_type.__name__, "/dev/full")
+
+    def test_export_preserves_original_error_when_close_also_fails(self):
+        for queue_type, export, symbol in (
+            (IndexedQueue, export_queue, "mmapq_queue_transfer_export"),
+            (IndexedBatchQueue, export_batch_queue, "mmapq_batch_queue_transfer_export"),
+        ):
+            queue = self.queue(queue_type)
+            with queue.create_appender() as appender:
+                if queue_type is IndexedQueue:
+                    appender.append(b"message")
+                else:
+                    with appender.start_batch() as writer:
+                        writer.append(b"message")
+                        writer.commit()
+            real_lib = transfer.lib
+            real_export = getattr(real_lib, symbol)
+
+            def failed_export(*args):
+                self.assertEqual(real_export(*args), 1)
+                return -4
+
+            with self.subTest(queue=queue_type.__name__):
+                with patch.object(transfer, "lib", wraps=real_lib) as counted:
+                    getattr(counted, symbol).side_effect = failed_export
+                    with self.assertRaises(QueueCorruptError):
+                        export(self.directory.name, queue_type.__name__, "/dev/full",
+                               from_index=0, to_index=0)
+                    counted.fclose.assert_called_once()
+
+    def test_interrupted_batch_copy_destination_can_reopen_and_append(self):
+        from pathlib import Path
+        import struct
+
+        queue = self.queue(IndexedBatchQueue)
+        with queue.create_appender() as appender:
+            appender_id = appender.id()
+            for messages in ([b"committed"], [b"partial", b"corrupt"]):
+                with appender.start_batch() as writer:
+                    for message in messages:
+                        writer.append(message)
+                    writer.commit()
+        with queue.create_reader() as reader:
+            self.assertEqual(reader.read(1), [b"partial", b"corrupt"])
+            offset = reader._ctx.batch_offset
+        path = Path(self.directory.name) / "IndexedBatchQueue" / f"payload_{appender_id}_0"
+        with path.open("r+b") as payload:
+            payload.seek(offset + 4 + 4 + len(b"partial"))
+            payload.write(struct.pack("<i", 0))
+        with self.assertRaises(QueueCorruptError):
+            copy_batch_queue(self.directory.name, "IndexedBatchQueue",
+                             self.directory.name, "interrupted")
+        with IndexedBatchQueue.create(self.directory.name, "interrupted") as destination:
+            with destination.create_reader() as reader:
+                self.assertEqual(reader.last_index(), 0)
+                self.assertEqual(reader.read(0), [b"committed"])
+                self.assertIsNone(reader.read(1))
+            with destination.create_appender_with_id(appender_id) as appender:
+                with appender.start_batch() as writer:
+                    writer.append(b"replacement")
+                    self.assertEqual(writer.commit(), 1)
+        with IndexedBatchQueue.create(self.directory.name, "interrupted") as destination:
+            with destination.create_reader() as reader:
+                self.assertEqual(reader.last_index(), 1)
+                self.assertEqual(reader.read(0), [b"committed"])
+                self.assertEqual(reader.read(1), [b"replacement"])
+                self.assertIsNone(reader.read(2))
 
     def test_corrupt_batch_message_is_not_delivered_or_exported(self):
         from pathlib import Path

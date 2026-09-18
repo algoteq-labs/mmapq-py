@@ -86,9 +86,10 @@ def export_queue(directory: str, queue_name: str, dest_path: str, *,
             )
         finally:
             close_result = lib.fclose(dest)
+        check_rc(n, "export_queue")
         if close_result != 0:
             raise OSError(ffi.errno, os.strerror(ffi.errno), dest_path)
-        return check_rc(n, "export_queue")
+        return n
     finally:
         reader.close()
 
@@ -204,9 +205,10 @@ def export_batch_queue(directory: str, queue_name: str, dest_path: str, *,
             )
         finally:
             close_result = lib.fclose(dest)
+        check_rc(n, "export_batch_queue")
         if close_result != 0:
             raise OSError(ffi.errno, os.strerror(ffi.errno), dest_path)
-        return check_rc(n, "export_batch_queue")
+        return n
     finally:
         reader.close()
 
