@@ -419,3 +419,17 @@ BSD 3-Clause — see [LICENSE](LICENSE).
 
 Linux only (x86-64; ARM64 untested). Requires naturally aligned lock-free
 atomics over `MAP_SHARED` mmap.
+## Upcoming hardening compatibility changes
+
+Transfer mapper exceptions now stop the transfer and re-raise the original
+exception after C cleanup, rather than silently assigning another appender ID.
+Transfers are not atomic: an already committed prefix may remain after failure.
+Package versions are unchanged pending release.
+
+`read_view` still requires manual lifetime discipline: a view and all derived
+aliases must not be used after the next read or close. This work does not make
+Python borrowed views lifetime-safe; ordinary `read` returns owned bytes.
+
+Commit publishes data, but does not guarantee power-loss durability. See the
+[C persistence contract](https://github.com/algoteq-labs/mmapq/blob/main/doc/persistence-contract.md) for restart,
+checkpoint, filesystem, and archival limitations.

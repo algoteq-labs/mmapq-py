@@ -43,6 +43,7 @@ class MmapOutOfMemoryError(MmapqError):
 
 
 _RC_ERRORS = {
+    -12: MmapqError,
     -11: MmapqError,
     -10: MmapqError,
     -9: MmapOutOfMemoryError,

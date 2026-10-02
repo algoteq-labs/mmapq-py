@@ -21,12 +21,17 @@ _REBASE = 0
 _PRESERVE = 1
 
 APPENDER_ID_AUTO = -1
+_APPENDER_ID_ABORT = -2147483648
 
 
-@ffi.callback("int32_t(uint16_t, void*)", error=APPENDER_ID_AUTO)
+@ffi.callback("int32_t(uint16_t, void*)", error=_APPENDER_ID_ABORT)
 def _mapper_trampoline(source_aid: int, ctx) -> int:
-    fn = ffi.from_handle(ctx)
-    result = fn(source_aid)
+    state = ffi.from_handle(ctx)
+    try:
+        result = state[0](source_aid)
+    except BaseException as error:
+        state[1] = error
+        return _APPENDER_ID_ABORT
     if result is None:
         return APPENDER_ID_AUTO
     # Valid appender IDs: 0-255 (256 slots, 8-bit header field).
@@ -45,7 +50,16 @@ def _setup_mapper(mapper):
         return ffi.NULL, ffi.NULL
     if not callable(mapper):
         raise TypeError(f"mapper must be callable, got {type(mapper).__name__}")
-    return _mapper_trampoline, ffi.new_handle(mapper)
+    return _mapper_trampoline, ffi.new_handle([mapper, None])
+
+
+def _check_mapper(handle):
+    if handle != ffi.NULL:
+        state = ffi.from_handle(handle)
+        error = state[1]
+        state[1] = None
+        if error is not None:
+            raise error
 
 
 def _mode(preserve: bool) -> int:
@@ -110,8 +124,8 @@ def import_queue(src_path: str, directory: str,
         mapper: Maps source appender ID to destination ID.
                 Return -1 (APPENDER_ID_AUTO) for auto-assign.
                 Pass None (the parameter value) for identity mapping.
-                **Note: if this function raises, the transfer
-                continues with auto-assigned IDs.**
+                If this function raises, the transfer stops and re-raises
+                the original exception after cleanup.
         on_conflict: ``ConflictBehavior.AUTO`` (default) or
                      ``ConflictBehavior.ABORT``.
 
@@ -134,6 +148,7 @@ def import_queue(src_path: str, directory: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "import_queue")
     finally:
         lib.fclose(src)
@@ -146,8 +161,8 @@ def import_batch_stream(src_path: str, directory: str,
                          mapper: Optional[Callable[[int], int]] = None,
                          on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
-    Note: if the mapper raises, the transfer continues with
-    auto-assigned appender IDs.
+    If the mapper raises, the transfer stops and re-raises the original
+    exception after cleanup. Earlier committed entries may remain.
 
     Import a batch-format stream into a normal queue (flatten).
 
@@ -174,6 +189,7 @@ def import_batch_stream(src_path: str, directory: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "import_batch_stream")
     finally:
         lib.fclose(src)
@@ -220,8 +236,8 @@ def import_batch_queue(src_path: str, directory: str,
                         mapper: Optional[Callable[[int], int]] = None,
                         on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
-    Note: if the mapper raises, the transfer continues with
-    auto-assigned appender IDs.
+    If the mapper raises, the transfer stops and re-raises the original
+    exception after cleanup. Earlier committed entries may remain.
 
     Import a batch-format stream into a batch queue.
 
@@ -247,6 +263,7 @@ def import_batch_queue(src_path: str, directory: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "import_batch_queue")
     finally:
         lib.fclose(src)
@@ -259,8 +276,8 @@ def import_flat_to_batch(src_path: str, directory: str,
                            mapper: Optional[Callable[[int], int]] = None,
                            on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
-    Note: if the mapper raises, the transfer continues with
-    auto-assigned appender IDs.
+    If the mapper raises, the transfer stops and re-raises the original
+    exception after cleanup. Earlier committed entries may remain.
 
     Import a flat stream into a batch queue (1-msg batches).
 
@@ -286,6 +303,7 @@ def import_flat_to_batch(src_path: str, directory: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "import_flat_to_batch")
     finally:
         lib.fclose(src)
@@ -298,8 +316,8 @@ def copy_queue(src_dir: str, src_name: str,
                mapper: Optional[Callable[[int], int]] = None,
                on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
-    Note: if the mapper raises, the transfer continues with
-    auto-assigned appender IDs.
+    If the mapper raises, the transfer stops and re-raises the original
+    exception after cleanup. Earlier committed entries may remain.
 
     Copy entries from one queue to another.
 
@@ -327,6 +345,7 @@ def copy_queue(src_dir: str, src_name: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "copy_queue")
     finally:
         reader.close()
@@ -339,8 +358,8 @@ def copy_batch_queue(src_dir: str, src_name: str,
                      mapper: Optional[Callable[[int], int]] = None,
                      on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
-    Note: if the mapper raises, the transfer continues with
-    auto-assigned appender IDs.
+    If the mapper raises, the transfer stops and re-raises the original
+    exception after cleanup. Earlier committed entries may remain.
 
     Copy batches from one batch queue to another.
 
@@ -368,6 +387,7 @@ def copy_batch_queue(src_dir: str, src_name: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "copy_batch_queue")
     finally:
         reader.close()
@@ -380,8 +400,8 @@ def copy_normal_to_batch(src_dir: str, src_name: str,
                          mapper: Optional[Callable[[int], int]] = None,
                          on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
-    Note: if the mapper raises, the transfer continues with
-    auto-assigned appender IDs.
+    If the mapper raises, the transfer stops and re-raises the original
+    exception after cleanup. Earlier committed entries may remain.
 
     Copy entries from a normal queue into a batch queue (1-msg batches).
 
@@ -409,6 +429,7 @@ def copy_normal_to_batch(src_dir: str, src_name: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "copy_normal_to_batch")
     finally:
         reader.close()
@@ -421,8 +442,8 @@ def copy_batch_to_normal(src_dir: str, src_name: str,
                          mapper: Optional[Callable[[int], int]] = None,
                          on_conflict: ConflictBehavior = ConflictBehavior.AUTO) -> int:
     """
-    Note: if the mapper raises, the transfer continues with
-    auto-assigned appender IDs.
+    If the mapper raises, the transfer stops and re-raises the original
+    exception after cleanup. Earlier committed entries may remain.
 
     Copy batches from a batch queue into a normal queue (flatten).
 
@@ -451,6 +472,7 @@ def copy_batch_to_normal(src_dir: str, src_name: str,
             int(allow_append),
             cb, ctx, on_conflict,
         )
+        _check_mapper(ctx)
         return check_rc(n, "copy_batch_to_normal")
     finally:
         reader.close()

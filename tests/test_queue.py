@@ -1249,7 +1249,7 @@ class TestTransfer(unittest.TestCase):
             shutil.rmtree(dest)
         q.close()
 
-    def test_import_mapper_exception_falls_back_to_auto(self):
+    def test_import_mapper_exception_aborts_transfer(self):
         q = IndexedQueue.create(self.test_dir, "aid_mapper_err")
         a = q.create_appender()
         a.append(b"hello")
@@ -1263,11 +1263,11 @@ class TestTransfer(unittest.TestCase):
 
             def _bad_mapper(aid):
                 raise ValueError("test exception")
-            n = import_queue(os.path.join(self.test_dir, "export.bin"),
+            with self.assertRaisesRegex(ValueError, "test exception"):
+                import_queue(os.path.join(self.test_dir, "export.bin"),
                              dest, "q",
                              mapper=_bad_mapper,
                              on_conflict=ConflictBehavior.AUTO)
-            self.assertEqual(n, 1)
         finally:
             shutil.rmtree(dest)
         q.close()

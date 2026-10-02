@@ -81,6 +81,13 @@ The two upstream rules restated because violating them is unrecoverable:
 
 ## Style
 
+- **Refactoring and optimization must not leave debris behind.** Redundant
+  blocks or braces, dead code, unused variables or helpers, and stale comments
+  left by a change are defects, even when behavior is correct and tests pass.
+  Review the resulting code, not just the edited lines, and remove leftovers
+  caused by the change before declaring it complete. This cleanup is part of
+  the task, not permission to refactor unrelated code.
+
 - `from __future__ import annotations`, full type hints on public API,
   docstrings state contracts (what raises, what the bytes lifetime is),
   no restating signatures. Match surrounding style exactly; no drive-by
