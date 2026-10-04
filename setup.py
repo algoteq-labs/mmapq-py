@@ -7,7 +7,7 @@ import glob
 import os
 from pathlib import Path
 
-from setuptools import setup
+from setuptools import Extension, setup
 from cffi import FFI
 
 ffi = FFI()
@@ -370,6 +370,9 @@ setup(
     description="Python bindings for mmapq — low-latency memory-mapped queue",
     packages=["mmapq"],
     package_dir={"": "src"},
-    ext_modules=[ffi.distutils_extension()],
+    ext_modules=[ffi.distutils_extension(), Extension(
+        "mmapq._borrowed_buffer", ["src/mmapq/_borrowed_buffer.c"],
+        extra_compile_args=["-std=c11", "-Wall", "-Wextra"],
+    )],
     python_requires=">=3.10",
 )

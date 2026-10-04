@@ -426,9 +426,34 @@ exception after C cleanup, rather than silently assigning another appender ID.
 Transfers are not atomic: an already committed prefix may remain after failure.
 Package versions are unchanged pending release.
 
-`read_view` still requires manual lifetime discipline: a view and all derived
-aliases must not be used after the next read or close. This work does not make
-Python borrowed views lifetime-safe; ordinary `read` returns owned bytes.
+`IndexedReader.read_view()` returns a read-only, zero-copy `memoryview` that
+keeps the reader alive. Reads, index queries, and `close()` raise `BufferError`
+while any exported view or alias remains. Release every view with `release()`
+or a memoryview context manager before advancing or closing the reader:
+
+```python
+with reader.read_view(0) as view:  # when entry 0 exists
+    payload = bytes(view)        # optional owned copy
+reader.close()                  # succeeds after all views/aliases release
+```
+
+Releasing the original view does not release surviving slices, casts, or buffer
+consumers. A failed `close()` leaves the reader open, including on reader context
+manager exit. If the block is already propagating an exception, the reader's
+context manager suppresses only the cleanup `BufferError`, preserving that
+original exception. The reader remains open with its finalizer armed; release
+all views and close explicitly, or allow garbage collection once all references
+(including retained tracebacks) are gone. Normal context exit still raises
+`BufferError` for an outstanding borrow.
+
+For nested reader/view contexts, release buffer consumers before leaving the
+view context. For example, a retained `numpy.frombuffer(view)` array can prevent
+`view.release()` from succeeding. Python's memoryview context exit may then raise
+`BufferError` and mask a processing exception; the reader cannot suppress that
+inner cleanup failure. Surviving view aliases also keep the reader borrowed.
+
+Ordinary `read()` continues to return owned bytes. Raw FFI access
+and external modification/truncation of committed files remain caller obligations.
 
 Commit publishes data, but does not guarantee power-loss durability. See the
 [C persistence contract](https://github.com/algoteq-labs/mmapq/blob/main/doc/persistence-contract.md) for restart,

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import weakref
+from functools import wraps
+from threading import Lock
 from typing import Optional
 
 from . import _cffi as _cffi_mod
+from ._borrowed_buffer import make_view
 from ._cdata import require_cdata, require_open
 from ._errors import MmapqError, QueueClosedError, QueueCorruptError, check_rc
 from .types import EntryStatus  # noqa: F401  (re-exported for compatibility)
@@ -24,6 +27,23 @@ def _destroy_batch_reader(inner):
         lib.mmapq_indexed_batch_reader_close(inner)
 
 
+def _reader_operation(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        # CFFI releases the GIL. Keep the borrow check and mapping operation
+        # indivisible relative to another read/close, including reentrant calls.
+        if not self._operation_lock.acquire(blocking=False):
+            raise BufferError("reader operation is already active")
+        try:
+            lease = self._view_lease() if self._view_lease is not None else None
+            if lease is not None and lease.active:
+                raise BufferError("release all reader views before reading or closing")
+            return method(self, *args, **kwargs)
+        finally:
+            self._operation_lock.release()
+    return guarded
+
+
 class IndexedReader:
     """Random-access reader for a single-message indexed queue.
 
@@ -37,7 +57,12 @@ class IndexedReader:
         self._runtime = runtime
         self._ctx = ffi.new("MmapqReadingContext *")
         self._last_read_valid = False
+        self._operation_lock = Lock()
+        self._view_lease = None
         self._finalizer = weakref.finalize(self, _destroy_reader, inner)
+        # finalize's default exit hook ignores strong references. A view held
+        # by a later atexit callback must still keep its mapping alive.
+        self._finalizer.atexit = False
 
     @classmethod
     def create(cls, directory: str, queue_name: str, *,
@@ -63,6 +88,7 @@ class IndexedReader:
         check_rc(rc, "mmapq_indexed_reader_create")
         return cls(ptr[0], runtime=runtime)
 
+    @_reader_operation
     def read(self, index: int) -> Optional[bytes]:
         """Read the entry at the given index.
 
@@ -76,24 +102,28 @@ class IndexedReader:
         lib.mmapq_indexed_reader_read(self._inner, index, self._ctx)
         return self._extract()
 
+    @_reader_operation
     def read_first(self) -> Optional[bytes]:
         """Read the first unarchived entry (at start_index)."""
         self._check_open()
         lib.mmapq_indexed_reader_read_first(self._inner, self._ctx)
         return self._extract()
 
+    @_reader_operation
     def read_last(self) -> Optional[bytes]:
         """Read the last committed entry."""
         self._check_open()
         lib.mmapq_indexed_reader_read_last(self._inner, self._ctx)
         return self._extract()
 
+    @_reader_operation
     def read_view(self, index: int) -> Optional[memoryview]:
         """Zero-copy view into the queue's mapped memory.
 
-        Valid only until the next read()/read_view()/close() on this
-        reader. Do not store it; copy with bytes(view) if you need the
-        data beyond the next call.
+        The read-only view keeps this reader alive. Reads, index queries,
+        and close raise BufferError until this view and all aliases are
+        released. Use view.release() or a memoryview context manager.
+        Copy with bytes(view) when independent ownership is needed.
         """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
@@ -102,10 +132,13 @@ class IndexedReader:
         self._check_status()
         if self._ctx.status == EntryStatus.AVAILABLE:
             self._last_read_valid = True
-            return memoryview(ffi.buffer(self._ctx.data, self._ctx.length))
+            view = make_view(ffi.buffer(self._ctx.data, self._ctx.length), self)
+            self._view_lease = weakref.ref(view.obj)
+            return view
         self._last_read_valid = False
         return None
 
+    @_reader_operation
     def entry_status(self, index: int) -> EntryStatus:
         """Check availability of the entry at the given index.
 
@@ -116,18 +149,21 @@ class IndexedReader:
         self._check_open()
         return EntryStatus(lib.mmapq_indexed_reader_entry_status(self._inner, index))
 
+    @_reader_operation
     def last_index(self) -> int:
         """Highest committed index, or -1 if the queue is empty."""
         self._check_open()
         return lib.mmapq_indexed_reader_last_index(self._inner)
 
+    @_reader_operation
     def start_index(self) -> int:
         """Lowest readable index (0 if queue is not archivable)."""
         self._check_open()
         return lib.mmapq_indexed_reader_start_index(self._inner)
 
+    @_reader_operation
     def close(self) -> None:
-        """Close the reader and release mapped regions. Idempotent."""
+        """Close mapped regions; raise BufferError while views exist. Idempotent."""
         if self._inner is not None:
             self._finalizer.detach()
             _destroy_reader(self._inner)
@@ -183,7 +219,13 @@ class IndexedReader:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        try:
+            self.close()
+        except BufferError:
+            if exc_type is None:
+                raise
+            # Preserve the processing exception. Outstanding views still own
+            # the mapping; leave the reader open and its finalizer armed.
         return False
 
 

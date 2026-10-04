@@ -553,6 +553,9 @@ class TestReader(unittest.TestCase):
         self.assertIsNotNone(view)
         copy_before = bytes(view)
         self.assertEqual(copy_before, b"msg0")
+        with self.assertRaises(BufferError):
+            r.read(1)
+        view.release()
         r.read(1)
         copy_after = bytes(copy_before)
         self.assertEqual(copy_after, b"msg0")
@@ -1326,12 +1329,15 @@ class TestTransfer(unittest.TestCase):
         a.close()
 
         r = IndexedReader.create(self.test_dir, "view_aid")
+        view = None
         try:
             view = r.read_view(0)
             self.assertIsNotNone(view)
             aid = r.appender_id()
             self.assertIsInstance(aid, int)
         finally:
+            if view is not None:
+                view.release()
             r.close()
         q.close()
 
