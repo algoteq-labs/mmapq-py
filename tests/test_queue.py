@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import struct
 import tempfile
 import unittest
 
@@ -23,6 +24,7 @@ from mmapq import (
     MmapqError,
     SchemaMismatchError,
     QueueExistsError,
+    QueueCorruptError,
     AppenderIdConflictError,
     ConflictBehavior,
     export_queue,
@@ -213,6 +215,31 @@ class TestBatchQueue(unittest.TestCase):
             big = b"x" * 4096
             with self.assertRaises(ValueError):
                 w.append(big)
+
+    def test_batch_recovery_refuses_truncated_scan(self):
+        """A corrupt message length inside the last committed batch must
+        make recovery (a fresh appender) refuse with QueueCorruptError
+        rather than silently recover to a wrong append position (A6)."""
+        q = IndexedBatchQueue.create(self.test_dir, "bq_rec_trunc")
+        a = q.create_appender()
+        for b in range(2):
+            with a.start_batch() as w:
+                for i in range(3):
+                    self.assertEqual(w.append(f"b{b}-m{i}-padding".encode()), i)
+                self.assertEqual(w.commit(), b)
+        a.close()
+
+        # Overwrite the length prefix of message 1 of the last committed
+        # batch: 64 start-of-stream + 55 first batch (4-byte count +
+        # 3*(4+13)) + 4 count + 17 first message (4+13) = offset 140.
+        payload = os.path.join(self.test_dir, "bq_rec_trunc", "payload_0_0")
+        with open(payload, "r+b") as f:
+            f.seek(140)
+            f.write(struct.pack("<i", -2147483632))  # 0x80000010 as int32
+
+        with self.assertRaises(QueueCorruptError):
+            q.create_appender()
+        q.close()
 
 
 class TestSingleQueue(unittest.TestCase):
