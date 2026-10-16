@@ -59,7 +59,14 @@ class IndexedQueue:
         return q
 
     def create_appender(self):
-        """Create a single-message appender."""
+        """Create a single-message appender.
+
+        A transient mapping timeout during the appender's join walk
+        surfaces as the base ``MmapqError`` (rc -1), not
+        ``QueueCorruptError`` — callers catching ``QueueCorruptError``
+        around appender open do not catch that case (D8; a distinct
+        timeout exception class remains deferred, X-01).
+        """
         from .single_appender import IndexedAppender
         ptr = ffi.new("MmapqIndexedAppender **")
         rc = lib.mmapq_indexed_queue_create_appender(require_open(self._inner), ptr)
@@ -73,6 +80,10 @@ class IndexedQueue:
 
         Validates that the ID is in range before the FFI call.
         Raises ValueError if the ID is out of range or already in use.
+        A transient mapping timeout during the appender's join walk
+        surfaces as the base ``MmapqError`` (rc -1), not
+        ``QueueCorruptError`` (D8; a distinct timeout exception class
+        remains deferred, X-01).
         """
         if not 0 <= appender_id < 256:
             raise ValueError(
