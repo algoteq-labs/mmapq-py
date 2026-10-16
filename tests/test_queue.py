@@ -204,7 +204,7 @@ class TestBatchQueue(unittest.TestCase):
     def test_batch_append_rejects_oversized_message(self):
         q = IndexedBatchQueue.create(
             self.test_dir, "bq_oversized",
-            region_size=4096, ring_size=16,
+            region_size=32768, ring_size=16,
             runtime=Runtime.region_mapper())
         a = q.create_appender()
 
@@ -212,7 +212,7 @@ class TestBatchQueue(unittest.TestCase):
             ok = w.append(b"small")
             self.assertEqual(ok, 0)
 
-            big = b"x" * 4096
+            big = b"x" * 32768
             with self.assertRaises(ValueError):
                 w.append(big)
 
@@ -1016,7 +1016,7 @@ class TestTransfer(unittest.TestCase):
         # Create batch queue with start_index=100 via C API
         bq_ptr = ffi.new("MmapqIndexedBatchQueue **")
         rc = lib.mmapq_indexed_batch_queue_create(
-            src_dir.encode(), b"bq", 4096, 16, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"bq", 32768, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, bq_ptr)
         self.assertEqual(rc, 0)
         bq = bq_ptr[0]
@@ -1047,7 +1047,7 @@ class TestTransfer(unittest.TestCase):
         # Create normal queue with start_index=100 via C API
         q_ptr = ffi.new("MmapqIndexedQueue **")
         rc = lib.mmapq_indexed_queue_create(
-            src_dir.encode(), b"q", 4096, 16, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"q", 32768, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, q_ptr)
         self.assertEqual(rc, 0)
         q = q_ptr[0]
@@ -1073,7 +1073,7 @@ class TestTransfer(unittest.TestCase):
 
         bq_ptr = ffi.new("MmapqIndexedBatchQueue **")
         rc = lib.mmapq_indexed_batch_queue_create(
-            src_dir.encode(), b"bq", 4096, 16, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"bq", 32768, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, bq_ptr)
         self.assertEqual(rc, 0)
         bq = bq_ptr[0]
@@ -1110,7 +1110,7 @@ class TestTransfer(unittest.TestCase):
 
         q_ptr = ffi.new("MmapqIndexedQueue **")
         rc = lib.mmapq_indexed_queue_create(
-            src_dir.encode(), b"q", 4096, 16, 1, 262144, 100, 10000000000, 0,
+            src_dir.encode(), b"q", 32768, 16, 1, 262144, 100, 10000000000, 0,
             ffi.NULL, ffi.NULL, q_ptr)
         self.assertEqual(rc, 0)
         q = q_ptr[0]

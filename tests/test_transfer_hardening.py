@@ -33,16 +33,18 @@ class TestTransferHardening(unittest.TestCase):
             with self.subTest(operation=copy.__name__):
                 source_name = copy.__name__ + "_source"
                 destination_name = copy.__name__ + "_destination"
-                with self.sized_queue(source_type, source_name, 8192) as source:
+                with self.sized_queue(source_type, source_name, 65536) as source:
                     with source.create_appender() as appender:
-                        for message in (b"prefix", b"x" * 5000, b"must-not-copy"):
+                        # 40000 bytes: fits the 64 KB source region, exceeds
+                        # the 32 KB destination region (32768 - 4).
+                        for message in (b"prefix", b"x" * 40000, b"must-not-copy"):
                             if source_type is IndexedQueue:
                                 appender.append(message)
                             else:
                                 with appender.start_batch() as writer:
                                     writer.append(message)
                                     writer.commit()
-                with self.sized_queue(destination_type, destination_name, 4096) as destination:
+                with self.sized_queue(destination_type, destination_name, 32768) as destination:
                     with destination.create_appender():
                         pass
                 with self.assertRaises(ValueError):

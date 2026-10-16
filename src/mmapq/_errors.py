@@ -27,7 +27,10 @@ class QueueCorruptError(MmapqError):
 
 
 class SchemaMismatchError(MmapqError):
-    """Schema version or queue type mismatch on open."""
+    """Schema version or queue type mismatch on open, or on-disk geometry
+    not supported by this build/host (pre-CAND-38-rule geometry, or a
+    page-size mismatch: a queue is portable only to hosts whose page size
+    divides its region_size)."""
 
 
 class QueueExistsError(MmapqError):

@@ -45,10 +45,14 @@ class IndexedBatchQueue:
         queue_name:     logical queue name
         write_runtime:  runtime for appender-side async region mapping
         read_runtime:   runtime for poller/reader-side async region mapping
-        region_size:    payload region size in bytes (power of two, default 4 MB)
+        region_size:    payload region size in bytes (power of two and a
+                        multiple of 32 KB, and a multiple of the OS page size
+                        — the CAND-38 geometry rule; default 4 MB)
         ring_size:      number of simultaneously mapped regions (default 4)
-        max_file_size:  max size of a single payload file; if None, computed
-                        as region_size * 256 (default 1 GB with default region_size)
+        max_file_size:  max size of a single payload file (a multiple of
+                        region_size, therefore of the 32 KB header block); if
+                        None, computed as region_size * 256 (default 1 GB with
+                        default region_size)
         start_index:    initial batch index (default 0)
         timeout_ns:     region-mapping timeout in nanoseconds (default 10 s)
         archivable:     if True, create archivable (default False)
