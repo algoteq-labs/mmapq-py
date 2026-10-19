@@ -39,6 +39,8 @@ ffi.cdef("""
     typedef struct MmapqIndexedArchiver MmapqIndexedArchiver;
     typedef struct MmapqIndexedBatchArchiver MmapqIndexedBatchArchiver;
     typedef struct MmapqBatchPayloadIterator MmapqBatchPayloadIterator;
+    typedef struct MmapqUncommittedPayloadIterator MmapqUncommittedPayloadIterator;
+    typedef struct MmapqUncommittedBatchIterator MmapqUncommittedBatchIterator;
 
     /* ── MmapqBatchReadingContext ──────────────────────────────────────────────── */
     typedef enum { MMAPQ_BATCH_ENTRY_AVAILABLE, MMAPQ_BATCH_ENTRY_END_OF_STREAM,
@@ -90,6 +92,14 @@ ffi.cdef("""
     int64_t  mmapq_indexed_appender_append_uncommitted(
                  MmapqIndexedAppender*, const void*, int32_t);
     int64_t  mmapq_indexed_appender_commit(MmapqIndexedAppender*, int64_t);
+    /* start_offset/end_offset take -1 for "not set" — the sentinel
+       MMAPQ_PAYLOAD_ITERATOR_NOT_SET (indexed_appender.h) does not cross
+       the FFI; Python passes -1. */
+    int      mmapq_indexed_appender_uncommitted_iterator_checked(
+                 MmapqIndexedAppender*, int64_t, int64_t,
+                 MmapqUncommittedPayloadIterator**);
+    int      mmapq_uncommitted_iterator_next(
+                 MmapqUncommittedPayloadIterator*, const void**, int32_t*, int64_t*);
     int64_t  mmapq_indexed_appender_current_index(const MmapqIndexedAppender*);
     uint8_t  mmapq_indexed_appender_id(const MmapqIndexedAppender*);
     void     mmapq_indexed_appender_close(MmapqIndexedAppender*);
@@ -152,6 +162,10 @@ ffi.cdef("""
 
     /* ── Batch payload iterator ──────────────────────────────────────────── */
     int      mmapq_batch_iterator_advance(MmapqBatchPayloadIterator*);
+    /* Checked step (1 message / 0 exhausted / negative MMAPQ_E*) — the
+       recovery walk uses this; a mid-batch error must raise, not truncate. */
+    int      mmapq_batch_iterator_next(
+                 MmapqBatchPayloadIterator*, const void**, int32_t*);
     int32_t  mmapq_batch_iterator_current_length_ffi(const MmapqBatchPayloadIterator*);
     const void* mmapq_batch_iterator_current_data_ffi(const MmapqBatchPayloadIterator*);
     int32_t  mmapq_batch_iterator_read_message_count(MmapqBatchPayloadIterator*, int64_t);
@@ -161,13 +175,20 @@ ffi.cdef("""
     /* ── Batch appender ──────────────────────────────────────────────────── */
     MmapqMutableBatch* mmapq_indexed_batch_appender_start_batch(MmapqIndexedBatchAppender*);
     int64_t       mmapq_mutable_batch_complete(MmapqMutableBatch*);
+    int64_t       mmapq_mutable_batch_complete_uncommitted(MmapqMutableBatch*);
+    int           mmapq_mutable_batch_discard(MmapqMutableBatch*);
     int64_t       mmapq_indexed_batch_appender_commit_batch(
                       MmapqIndexedBatchAppender*, int64_t);
+    int           mmapq_indexed_batch_appender_uncommitted_batches_checked(
+                      MmapqIndexedBatchAppender*, MmapqUncommittedBatchIterator**);
+    int           mmapq_uncommitted_batch_next(
+                      MmapqUncommittedBatchIterator*, int64_t*, int32_t*,
+                      MmapqBatchPayloadIterator**);
+    int           mmapq_indexed_batch_appender_join_completed_open_batch(
+                      MmapqIndexedBatchAppender*, int64_t*);
     int32_t       mmapq_mutable_batch_append(MmapqMutableBatch*, const void*, int32_t);
     int32_t       mmapq_mutable_batch_append_remaining_from(
                       MmapqMutableBatch*, MmapqBatchPayloadIterator*);
-    void          mmapq_indexed_batch_appender_discard_batch(
-                      MmapqIndexedBatchAppender*, int64_t);
     uint8_t       mmapq_indexed_batch_appender_id(const MmapqIndexedBatchAppender*);
     void          mmapq_indexed_batch_appender_close(MmapqIndexedBatchAppender*);
 

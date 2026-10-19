@@ -101,6 +101,30 @@ export_batch_queue("./data", "events", "./data/events.mmapq")
 
 For single-message queues use `IndexedReader` and `export_queue` instead.
 
+### Recovery — uncommitted messages and batches
+
+After a restart, messages appended but never committed (and batches staged
+or discarded before a crash) are recoverable by the rejoining lane owner.
+The iterators snapshot at call time; do not append while iterating. Commit
+found offsets with `commit()` / `commit_batch()` — any subset, any order;
+skipping is fine. Archiving may remove messages the walk has not yielded,
+and discarded batches reappear in recovery — recovery code decides.
+
+```python
+from mmapq import IndexedQueue
+
+with IndexedQueue.create("./data", "my_queue") as queue:
+    with queue.create_appender() as appender:
+        for offset, data in appender.uncommitted():
+            print(f"recovered {len(data)} bytes at {offset}")
+            appender.commit(offset)  # publish; skipping is also valid
+
+# Batch lanes: appender.uncommitted_batches() yields (offset, messages);
+# appender.commit_batch(offset) publishes; appender.join_completed_open_batch()
+# reports a crash-interrupted batch the rejoin completed to staged.
+# BatchWriter.complete_uncommitted() stages without publishing.
+```
+
 ## A note on validation and safety
 
 The Python extension compiles the C library with `-DNDEBUG`, so it runs the

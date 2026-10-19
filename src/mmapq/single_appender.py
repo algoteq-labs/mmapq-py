@@ -71,6 +71,44 @@ class IndexedAppender:
         """Return the index that will be assigned to the next append."""
         return lib.mmapq_indexed_appender_current_index(require_open(self._inner))
 
+    def uncommitted(self):
+        """Iterate this appender's uncommitted payloads.
+
+        Snapshot at call time — appends/commits after the call are
+        invisible. Yields ``(offset: int, data: bytes)`` pairs from the
+        archive line onward. Do not append while iterating (the appender is
+        exclusively lent to the walk, by contract). Commit found offsets
+        with ``commit()`` — any subset, any order, same session or after
+        rejoin; not committing = skip; an offset archiving has overtaken
+        raises ValueError. Archiving may remove messages the walk has not
+        yielded, even after an undo; discarded tails reappear in recovery.
+        Raises QueueCorruptError for a pre-0.2.0 queue (zero archive line —
+        recreate the queue).
+        """
+        require_open(self._inner)
+        out = ffi.new("MmapqUncommittedPayloadIterator **")
+        # -1 is MMAPQ_PAYLOAD_ITERATOR_NOT_SET (indexed_appender.h) — the
+        # full archive-line-to-end walk.
+        check_rc(
+            lib.mmapq_indexed_appender_uncommitted_iterator_checked(
+                self._inner, -1, -1, out),
+            "uncommitted",
+        )
+        return self._uncommitted_gen(out[0])
+
+    def _uncommitted_gen(self, it):
+        data = ffi.new("const void **")
+        length = ffi.new("int32_t *")
+        offset = ffi.new("int64_t *")
+        while True:
+            require_open(self._inner)
+            rc = lib.mmapq_uncommitted_iterator_next(it, data, length, offset)
+            if rc == 0:
+                return
+            if rc < 0:
+                check_rc(rc, "uncommitted")
+            yield int(offset[0]), bytes(ffi.buffer(data[0], length[0]))
+
     def id(self) -> int:
         """Return the appender's per-lane ID (0–255)."""
         return lib.mmapq_indexed_appender_id(require_open(self._inner))
