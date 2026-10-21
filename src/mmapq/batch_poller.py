@@ -36,11 +36,17 @@ def iter_batch_messages(ctx: "CData") -> list[bytes]:
     """
     messages = []
     it_ptr = ctx.iterator
-    while lib.mmapq_batch_iterator_advance(it_ptr):
-        length = lib.mmapq_batch_iterator_current_length_ffi(it_ptr)
-        data_ptr = lib.mmapq_batch_iterator_current_data_ffi(it_ptr)
-        messages.append(bytes(ffi.buffer(data_ptr, length)))
-    return messages
+    data = ffi.new("const void **")
+    length = ffi.new("int32_t *")
+    while True:
+        rc = lib.mmapq_batch_iterator_next(it_ptr, data, length)
+        if rc == 0:
+            return messages
+        if rc < 0:
+            # A mid-batch timeout/corruption must never surface as a
+            # silently truncated message list (CAND-51a).
+            check_rc(rc, "iter_batch_messages")
+        messages.append(bytes(ffi.buffer(data[0], length[0])))
 
 
 def _destroy_batch_poller(inner):
@@ -59,7 +65,11 @@ def _c_trampoline(batch_index, ctx_ptr, user_data):
     try:
         messages = iter_batch_messages(ctx_ptr)
         if len(messages) != ctx_ptr.message_count:
-            return NextMove.STOP
+            # Unreachable once the loop above is checked — raise, never
+            # stall silently (CAND-51a).
+            raise QueueCorruptError(
+                f"batch {batch_index}: iterated {len(messages)} of "
+                f"{ctx_ptr.message_count} messages without an error")
         return NextMove(handler(batch_index, messages))
     except BaseException as e:
         poller._pending_exc = e

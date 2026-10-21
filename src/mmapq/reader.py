@@ -344,12 +344,15 @@ class IndexedBatchReader:
         from .batch_poller import iter_batch_messages
         status = self._ctx.status
         if status == BatchEntryStatus.AVAILABLE:
-            self._last_read_valid = True
+            # The flag is set only after iteration AND the error-channel
+            # check succeed (CAND-51a review: iter_batch_messages raises on
+            # a mid-batch error — a raised read must not leave a stale True).
+            self._last_read_valid = False
             messages = iter_batch_messages(self._ctx)
             error = lib.mmapq_indexed_batch_reader_last_error(self._inner)
             if error < 0:
-                self._last_read_valid = False
                 check_rc(error, "read_batch_messages")
+            self._last_read_valid = True
             return messages
         else:
             self._last_read_valid = False

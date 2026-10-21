@@ -242,6 +242,112 @@ class TestBatchQueue(unittest.TestCase):
             q.create_appender()
         q.close()
 
+    def _write_corruptable_batch(self, name):
+        """Write one committed batch [AAAA, BBBB, CCCC], close, then corrupt
+        the second message's length on disk (0x7FFFFFFF exceeds the region
+        capacity, so the C iterator fails MMAPQ_ECORRUPT at message 2).
+        Batch framing: @64 int32 count, then per message int32 len + data."""
+        q = IndexedBatchQueue.create(self.test_dir, name)
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"AAAA")
+            w.append(b"BBBB")
+            w.append(b"CCCC")
+            w.commit()
+        a.close()
+        q.close()
+        payload = os.path.join(self.test_dir, name, "payload_0_0")
+        with open(payload, "r+b") as f:
+            f.seek(64)
+            (count,) = struct.unpack("<i", f.read(4))
+            self.assertEqual(count, 3)
+            (len1,) = struct.unpack("<i", f.read(4))
+            self.assertEqual(len1, 4)
+            f.seek(64 + 4 + 4 + len1)
+            f.write(struct.pack("<i", 0x7FFFFFFF))
+
+    def test_iter_batch_messages_mid_batch_corruption_raises(self):
+        """CAND-51a F1 fail-first pin: the raw batch-message iteration helper
+        must raise on a mid-batch corruption. Pre-fix it silently returned
+        the truncated list [b'AAAA'] (observed); post-fix QueueCorruptError."""
+        from mmapq.batch_poller import iter_batch_messages
+        from mmapq.types import BatchEntryStatus
+        self._write_corruptable_batch("bq_iter_corrupt")
+        br = IndexedBatchReader.create(self.test_dir, "bq_iter_corrupt")
+        ctx = ffi.new("MmapqBatchReadingContext *")
+        lib.mmapq_indexed_batch_reader_read(br._inner, 0, ctx)
+        self.assertEqual(ctx.status, BatchEntryStatus.AVAILABLE)
+        with self.assertRaises(QueueCorruptError):
+            iter_batch_messages(ctx)
+        br.close()
+
+    def test_batch_poll_mid_batch_corruption_raises_and_cursor_held(self):
+        """CAND-51a contract pin: polling a batch whose middle message length
+        is corrupt raises QueueCorruptError; the handler is never invoked
+        and the cursor does not advance."""
+        self._write_corruptable_batch("bq_poll_corrupt")
+        q = IndexedBatchQueue.create(self.test_dir, "bq_poll_corrupt")
+        p = q.create_poller()
+        self.assertEqual(p.current_batch_index(), 0)
+        seen = []
+        with self.assertRaises(QueueCorruptError):
+            p.poll(lambda bi, msgs: seen.extend(msgs) or NextMove.ADVANCE)
+        self.assertEqual(seen, [])
+        self.assertEqual(p.current_batch_index(), 0)
+        p.close()
+        q.close()
+
+    def test_batch_reader_mid_batch_corruption_raises(self):
+        """CAND-51a contract pin: reading a batch whose middle message length
+        is corrupt raises QueueCorruptError, reproducibly."""
+        self._write_corruptable_batch("bq_read_corrupt")
+        br = IndexedBatchReader.create(self.test_dir, "bq_read_corrupt")
+        with self.assertRaises(QueueCorruptError):
+            br.read(0)
+        with self.assertRaises(QueueCorruptError):
+            br.read(0)
+        br.close()
+
+    def test_batch_reader_corruption_invalidates_last_read(self):
+        """CAND-51a review fix pin: a failed read must invalidate the last
+        valid read — after read() raises on a corrupt batch,
+        batch_appender_id() raises MmapqError rather than returning the
+        corrupt batch's appender id. Batch 0 (b'good') spans @64..76; batch 1
+        ([AAAA,BBBB,CCCC]) starts @76 — its second message length (@88) is
+        corrupted to 0x7FFFFFFF."""
+        name = "bq_lastread"
+        q = IndexedBatchQueue.create(self.test_dir, name)
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"good")
+            w.commit()
+        with a.start_batch() as w:
+            w.append(b"AAAA")
+            w.append(b"BBBB")
+            w.append(b"CCCC")
+            w.commit()
+        a.close()
+        q.close()
+        payload = os.path.join(self.test_dir, name, "payload_0_0")
+        with open(payload, "r+b") as f:
+            f.seek(76)
+            (count,) = struct.unpack("<i", f.read(4))
+            self.assertEqual(count, 3)
+            (len1,) = struct.unpack("<i", f.read(4))
+            self.assertEqual(len1, 4)
+            f.seek(76 + 4 + 4 + len1)
+            f.write(struct.pack("<i", 0x7FFFFFFF))
+
+        br = IndexedBatchReader.create(self.test_dir, name)
+        self.assertEqual(br.read(0), [b"good"])
+        self.assertEqual(br.batch_appender_id(), 0)
+        with self.assertRaises(QueueCorruptError):
+            br.read(1)
+        with self.assertRaises(MmapqError):
+            br.batch_appender_id()
+        br.close()
+
+
 
 class TestSingleQueue(unittest.TestCase):
     """Tests for the single-message queue bindings."""
