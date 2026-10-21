@@ -25,6 +25,69 @@ class TestSingleMessageRecovery(unittest.TestCase):
         self.addCleanup(queue.close)
         return queue
 
+    def test_c51e_rejoin_exact_infile_region_end_default_runtime(self):
+        """CAND-51e pin (owner ruling: the RW rejoin walk). A message ends
+        exactly at an in-file region end; clean close; reopen + append.
+        Default arguments — no runtime (the NULL/sync path,
+        single_queue.py create()). Pre-fix the rejoin walk probed the
+        unwritten in-file region through the RO payload accessor (no size
+        check) and the process died with SIGBUS — hence the subprocess
+        (multiprocessing 'fork'), which keeps the suite alive and reports
+        the signal as the exit code."""
+        import multiprocessing
+        import os
+
+        directory = self.directory.name
+
+        def child():
+            try:
+                q = IndexedQueue.create(directory, "q")   # default args, no runtime
+                a = q.create_appender()
+                # default geometry: region 4 MiB, file 1 GiB — 4 MiB is an
+                # in-file region boundary. [64, 4194304): len = 4194304-68.
+                big = b"E" * (4 * 1024 * 1024 - 68)
+                assert a.append(big) == 0
+                a.close()
+                q.close()
+                q = IndexedQueue.create(directory, "q")
+                a = q.create_appender()
+                off = a.append_uncommitted(b"recovery")
+                assert off == 4 * 1024 * 1024, off      # exact position
+                assert a.commit(off) == 1
+                a.close()
+                q.close()
+            finally:
+                os._exit(0)   # never return to the parent's unittest state
+
+        # os._exit(0) above must be reached on success; wrap to force a
+        # nonzero exit on assertion failure
+        def child_guarded():
+            try:
+                child()
+            except BaseException:
+                import traceback, sys
+                traceback.print_exc()
+                sys.stdout.flush()
+                os._exit(2)
+
+        p = multiprocessing.Process(target=child_guarded)
+        p.start()
+        p.join(60)
+        if p.exitcode is None:
+            p.kill()
+            p.join()
+            self.fail("c51e pin: child did not exit")
+        self.assertEqual(p.exitcode, 0,
+                         f"child exitcode {p.exitcode} (-7 = SIGBUS: the "
+                         "pre-fix rejoin walk probed the unwritten region)")
+
+        # parent: both records readable, exact bytes
+        queue = self.queue()
+        r = queue.create_reader()
+        self.assertEqual(len(r.read(0)), 4 * 1024 * 1024 - 68)
+        self.assertEqual(r.read(1), b"recovery")
+        r.close()
+
     def test_uncommitted_finds_uncommitted(self):
         queue = self.queue()
         with queue.create_appender() as a:
