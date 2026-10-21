@@ -201,3 +201,116 @@ class TestBatchRecovery(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBatchC51bPins(unittest.TestCase):
+    """CAND-51b F-REC-3 wrapper pins (batch): overtaken commit rejection,
+    out-of-order commit, archiver forward/undo, empty-batch rejection.
+
+    ORPHANED recovery is a C-only pin (test_batch_start_recovers_orphaned_
+    open_batch): the pre-store fault that creates ORPHANED is unreachable
+    from the wrapper. reclaim_files has no wrapper binding (C-only for both
+    queue types).
+    """
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+
+    def queue(self, archivable=False):
+        queue = IndexedBatchQueue.create(
+            self.directory.name, "q", archivable=archivable)
+        self.addCleanup(queue.close)
+        return queue
+
+    def test_commit_batch_overtaken_is_rejected(self):
+        """Mirrors the C §3.5 overtaken pre-check
+        (test_batch_uncommitted_dg_line_respected)."""
+        queue = self.queue(archivable=True)
+        with queue.create_appender() as a:
+            with a.start_batch() as w:
+                w.append(b"b1")
+                off_b1 = w.complete_uncommitted()
+            self.assertEqual(off_b1, 64)
+            with a.start_batch() as w:
+                w.append(b"b2")
+                self.assertEqual(w.commit(), 0)
+
+            arch = queue.create_archiver()
+            arch.archive_up_to_index(1)  # boundary past B1
+            arch.close()
+
+            with self.assertRaises(ValueError):
+                a.commit_batch(off_b1)
+
+            # Never published; start_index moved past B2: a fresh poller
+            # starts at 1 and sees EOS — nothing live remains.
+            with queue.create_poller() as p:
+                self.assertEqual(
+                    p.poll(lambda bi, msgs: NextMove.ADVANCE),
+                    PollResult.END_OF_STREAM)
+
+    def test_batch_commit_out_of_order_multi_legal(self):
+        """Mirrors test_batch_commit_out_of_order_multi_legal: stage A then
+        B, commit B then A — membership is the gate; exact indices."""
+        queue = self.queue()
+        with queue.create_appender() as a:
+            with a.start_batch() as w:
+                w.append(b"a")
+                off_a = w.complete_uncommitted()
+            with a.start_batch() as w:
+                w.append(b"b")
+                off_b = w.complete_uncommitted()
+            self.assertEqual(off_a, 64)
+            self.assertEqual(off_b, 73)  # 64 + 4 (count) + 4 (len) + 1 ("a")
+
+            self.assertEqual(a.commit_batch(off_b), 0)
+            self.assertEqual(a.commit_batch(off_a), 1)
+
+    def test_batch_archiver_forward_and_undo(self):
+        queue = self.queue(archivable=True)
+        with queue.create_appender() as a:
+            for i, msg in enumerate([b"m0", b"m1", b"m2"]):
+                with a.start_batch() as w:
+                    w.append(msg)
+                    self.assertEqual(w.commit(), i)
+
+        # Poller created BEFORE the archive: cursor 0. After archiving to 2
+        # the cursor is below start_index → ARCHIVED; undo restores reads.
+        with queue.create_poller() as p:
+            captured = []
+
+            def handler(bi, msgs):
+                captured.extend(msgs)
+                return NextMove.ADVANCE
+
+            self.assertEqual(p.poll(handler), PollResult.ADVANCED)
+            self.assertEqual(captured, [b"m0"])
+
+            arch = queue.create_archiver()
+            arch.archive_up_to_index(2)
+            # archivable_files binding: nothing is wholly below the boundary
+            # at the default geometry (everything is in payload file 0).
+            self.assertEqual(arch.archivable_files(), [])
+            self.assertEqual(p.poll(handler), PollResult.ARCHIVED)
+            arch.archive_up_to_index(0)  # undo
+            arch.close()
+
+            self.assertEqual(p.poll(handler), PollResult.ADVANCED)
+            self.assertEqual(p.poll(handler), PollResult.ADVANCED)
+            self.assertEqual(captured, [b"m0", b"m1", b"m2"])
+
+    def test_batch_empty_commit_and_stage_rejected(self):
+        """EINVAL on complete/complete_uncommitted of an empty batch; the
+        context manager discards on exit and the lane stays usable."""
+        queue = self.queue()
+        with queue.create_appender() as a:
+            with a.start_batch() as w:
+                with self.assertRaises(ValueError):
+                    w.commit()
+            with a.start_batch() as w:
+                with self.assertRaises(ValueError):
+                    w.complete_uncommitted()
+            with a.start_batch() as w:
+                w.append(b"ok")
+                self.assertEqual(w.commit(), 0)
