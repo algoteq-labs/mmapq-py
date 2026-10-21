@@ -17,6 +17,7 @@ from mmapq import (
     IndexedPoller,
     IndexedBatchQueue,
     IndexedBatchAppender,
+    IndexedBatchPoller,
     IndexedReader,
     IndexedBatchReader,
     IndexedArchiver,
@@ -505,6 +506,90 @@ class TestQueueType(unittest.TestCase):
         self.assertEqual(result2, PollResult.ADVANCED,
                          "poll after queue created should see data")
         p.close()
+
+    def test_poll_header_timeout_raises_not_eos(self):
+        """CAND-17(a): a mapping timeout on the poller's header read raises
+        MmapqError (rc=-1, mapping timeout — text from C mmapq_strerror),
+        never returns END_OF_STREAM, and the cursor does not advance.
+        Pin shape: standalone poller with timeout_ns=0
+        (audit/repro/INV-24_timeout_as_eos.c)."""
+        import time
+        rt = Runtime.region_mapper()  # shared process-wide runtime; not closed (house pattern)
+        q = IndexedQueue.create(self.test_dir, "q", runtime=rt)
+        a = q.create_appender()
+        a.append(b"hello")
+        a.close()
+
+        ptr = ffi.new("MmapqIndexedPoller **")
+        rc = lib.mmapq_indexed_poller_create(
+            self.test_dir.encode(), b"q", 4, 0, rt._inner, ptr)
+        check_rc(rc, "create_poller")
+        p = IndexedPoller(ptr[0])
+        p._runtime = rt
+
+        seen = []
+        with self.assertRaises(MmapqError) as cm:
+            p.poll(lambda i, aid, data: seen.append(bytes(data)) or NextMove.ADVANCE)
+        self.assertIn("mapping timeout", str(cm.exception))
+        self.assertEqual(seen, [])
+
+        # Cursor never advanced on the timeout: retry (bounded) until the
+        # background mapping completes; the same message then advances.
+        deadline = time.monotonic() + 5.0
+        result = None
+        while time.monotonic() < deadline:
+            try:
+                result = p.poll(
+                    lambda i, aid, data: seen.append(bytes(data)) or NextMove.ADVANCE)
+                break
+            except MmapqError as e:
+                if "mapping timeout" not in str(e):
+                    raise  # retry only on the timeout, like the C and Rust pins
+                continue
+        self.assertEqual(result, PollResult.ADVANCED)
+        self.assertEqual(seen, [b"hello"])
+        p.close()
+        q.close()
+
+    def test_batch_poll_header_timeout_raises_not_eos(self):
+        """CAND-17(a) batch twin of test_poll_header_timeout_raises_not_eos."""
+        import time
+        rt = Runtime.region_mapper()  # shared process-wide runtime; not closed (house pattern)
+        q = IndexedBatchQueue.create(self.test_dir, "bq", runtime=rt)
+        a = q.create_appender()
+        with a.start_batch() as w:
+            w.append(b"hello")
+            w.commit()
+        a.close()
+
+        ptr = ffi.new("MmapqIndexedBatchPoller **")
+        rc = lib.mmapq_indexed_batch_poller_create(
+            self.test_dir.encode(), b"bq", 4, 0, rt._inner, ptr)
+        check_rc(rc, "create_batch_poller")
+        p = IndexedBatchPoller(ptr[0])
+        p._runtime = rt
+
+        seen = []
+        with self.assertRaises(MmapqError) as cm:
+            p.poll(lambda bi, msgs: seen.extend(bytes(m) for m in msgs) or NextMove.ADVANCE)
+        self.assertIn("mapping timeout", str(cm.exception))
+        self.assertEqual(seen, [])
+
+        deadline = time.monotonic() + 5.0
+        result = None
+        while time.monotonic() < deadline:
+            try:
+                result = p.poll(
+                    lambda bi, msgs: seen.extend(bytes(m) for m in msgs) or NextMove.ADVANCE)
+                break
+            except MmapqError as e:
+                if "mapping timeout" not in str(e):
+                    raise  # retry only on the timeout, like the C and Rust pins
+                continue
+        self.assertEqual(result, BatchPollResult.ADVANCED)
+        self.assertEqual(seen, [b"hello"])
+        p.close()
+        q.close()
 
     def test_no_stderr_output_on_wrong_type(self):
         import os, tempfile
