@@ -68,10 +68,12 @@ class IndexedArchiver:
     def archivable_files(self) -> list[str]:
         """Return paths to files fully covered by the archive boundary.
 
-        These files are safe to delete, move, or compress — but a listing
-        is a snapshot, not permission: mark the listed files, wait, then
-        delete only files that a fresh archivable_files() call taken after
-        the wait still names (see doc/archiving-design.md).
+        Files no live entry can need at the time of the call. Delete them
+        with reclaim_files() (always safe). If you delete, move or compress
+        them yourself, they are safe provided no undo (archive_up_to_index
+        below the current start_index) runs between this call and your last
+        unlink. An undo that ran before this call is harmless, because the
+        listing already reflects it (see doc/archiving-design.md).
         """
         max_paths = 256
         arr = ffi.new("char *[256]")
