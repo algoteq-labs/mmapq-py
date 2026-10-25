@@ -168,8 +168,8 @@ class IndexedBatchAppender:
         reappear in recovery after a restart — the walker reports them and
         refill makes them committable; recovery code decides. Archiving may
         remove batches the walk has not yielded, even after an undo. Raises
-        QueueCorruptError for a pre-0.2.0 queue (zero archive line —
-        recreate the queue).
+        QueueCorruptError on a zero archive line — a corrupt appender meta
+        (pre-0.2.0 queues are refused at open with SchemaMismatchError).
         """
         require_open(self._inner)
         out = ffi.new("MmapqUncommittedBatchIterator **")

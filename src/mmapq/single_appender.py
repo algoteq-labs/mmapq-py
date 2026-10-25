@@ -82,8 +82,14 @@ class IndexedAppender:
         rejoin; not committing = skip; an offset archiving has overtaken
         raises ValueError. Archiving may remove messages the walk has not
         yielded, even after an undo; discarded tails reappear in recovery.
-        Raises QueueCorruptError for a pre-0.2.0 queue (zero archive line —
-        recreate the queue).
+        Raises QueueCorruptError on a zero archive line — a corrupt
+        appender meta (pre-0.2.0 queues are refused at open with
+        SchemaMismatchError). After a process crash only the lane's
+        highest-offset uncommitted record can be torn (single writer,
+        sequential writes, the length prefix is written before the data);
+        every earlier uncommitted record is byte-intact. Validate before
+        committing; with no payload integrity check, discard that record
+        and re-request or re-append it.
         """
         require_open(self._inner)
         out = ffi.new("MmapqUncommittedPayloadIterator **")
