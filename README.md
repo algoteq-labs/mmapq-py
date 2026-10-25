@@ -400,8 +400,9 @@ Reach for the Python bindings when you want:
 - A Python consumer, projection, or analysis process reading a log that C or
   Rust producers write — the replay/notebook/dashboard side of an
   event-sourced pipeline.
-- Cross-process compatibility with existing C, Rust, or Algoteq Java
-  deployments sharing a queue.
+- Cross-process compatibility with existing C or Rust deployments sharing
+  a queue (Java interop is not supported in 0.2.0 — Java-written queues
+  are refused at open; planned at schema 2).
 - Replay, export, and offline forensics over recorded queues.
 - Prototyping and testing with the real wire format.
 
@@ -411,17 +412,27 @@ bindings; let Python read.
 ## Compatibility
 
 The wire format is identical to the C library and the Rust bindings, and
-compatible with Algoteq's Java implementation (tools4j-derived; **not**
-compatible with upstream tools4j — the formats have diverged). Batch queues
-are a C-ecosystem feature and are not read by Java.
+derives from Algoteq's Java implementation (tools4j-derived; **not**
+compatible with upstream tools4j — the formats have diverged). Sharing
+queues with Java is not supported in 0.2.0: Java-written queues are
+refused at open (schema_version 1), both queue types; planned at schema
+2, under the same protocol contract (see the C library's
+`doc/wire-format.md`).
 
 ## Stability
 
-The wire format and feature set are **frozen**: queue files written today
-remain readable by every future version, and the API grows only to complete
-parity with the Algoteq Java reference. The Python bindings expose the
-producer/consumer and replay surface; some low-level batch construction
-primitives remain C/Rust only (see `doc/feature-matrix.md`).
+The wire format is frozen within a schema version. 0.2.0 writes
+`schema_version=2` and refuses 0.1.0 files (`schema_version=1`) at open
+(Python: `SchemaMismatchError`): 0.2.0 changed what 0.1.0 files mean and
+accept (the archive-line field, the geometry rule, the unified tail
+rule). To move 0.1.0 data forward, export with a 0.1.0 library and
+import into a fresh 0.2.0 queue — the export stream format is unchanged.
+Each release states the schema versions it reads; a file of any other
+version is refused at open. A version change is always a clean refusal,
+never a silent misread. The feature set is frozen and the API grows only
+to complete parity with the Algoteq Java reference. The Python bindings
+expose the producer/consumer and replay surface; some low-level batch
+construction primitives remain C/Rust only (see `doc/feature-matrix.md`).
 
 ## Testing
 
