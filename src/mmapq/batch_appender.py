@@ -127,15 +127,26 @@ class IndexedBatchAppender:
         self._finalizer = weakref.finalize(self, _destroy_batch_appender, inner)
 
     def start_batch(self) -> BatchWriter:
-        """Start a new batch write session."""
+        """Start a new batch write session.
+
+        Raises QueueClosedError if the appender is closed, MmapqError if a
+        batch is already active on it; the C failure codes route through
+        check_rc (ValueError / QueueClosedError / QueueCorruptError /
+        MmapqError per _RC_ERRORS — all but ValueError are MmapqError
+        subclasses, and EINVAL is unreachable here: NULL arguments are
+        impossible by construction and the double-start is pre-empted by
+        the active-batch guard above).
+        """
         require_open(self._inner)
         if self._active_batch:
             raise MmapqError("a batch is already active on this appender")
-        ptr = lib.mmapq_indexed_batch_appender_start_batch(self._inner)
-        if not ptr:
-            raise MmapqError("start_batch returned NULL")
+        out = ffi.new("MmapqMutableBatch **")
+        check_rc(
+            lib.mmapq_indexed_batch_appender_start_batch_checked(self._inner, out),
+            "start_batch",
+        )
         self._active_batch = True
-        return BatchWriter(self, ptr)
+        return BatchWriter(self, out[0])
 
     def id(self) -> int:
         """Return this appender's lane ID (0–255)."""

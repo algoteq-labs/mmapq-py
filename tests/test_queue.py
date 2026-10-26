@@ -74,6 +74,25 @@ class TestBatchQueue(unittest.TestCase):
         p.close()
         q.close()
 
+    def test_start_batch_closed_appender_guard_raises_closed(self):
+        """CAND-50 item 4 (D4.3): pins the Python guard — a closed appender
+        is refused by require_open before any FFI call (exact type). No
+        negative rc from start_batch_checked is reachable from Python:
+        EINVAL is impossible by construction or pre-empted (NULL out/app,
+        the active-batch guard), ECLOSED is pre-empted here, ORPHANED
+        recovery needs the C test seam, ETIMEDOUT needs a mapping stall.
+        The rc → exception mapping itself is covered by the check_rc unit
+        tests (TestErrors.test_eio_error_via_check_rc,
+        TestErrors.test_exception_types_importable)."""
+        from mmapq import QueueClosedError
+        q = IndexedBatchQueue.create(self.test_dir, "test_sb_closed")
+        a = q.create_appender()
+        a.close()
+        with self.assertRaises(QueueClosedError) as cm:
+            a.start_batch()
+        self.assertIs(type(cm.exception), QueueClosedError)
+        q.close()
+
     def test_append_and_poll_one_batch(self):
         q = IndexedBatchQueue.create(self.test_dir, "test_b1")
         a = q.create_appender()
@@ -1215,7 +1234,10 @@ class TestTransfer(unittest.TestCase):
         rc = lib.mmapq_indexed_batch_queue_create_appender(bq, ba_ptr)
         self.assertEqual(rc, 0)
         ba = ba_ptr[0]
-        mb = lib.mmapq_indexed_batch_appender_start_batch(ba)
+        mb_ptr = ffi.new("MmapqMutableBatch **")
+        rc = lib.mmapq_indexed_batch_appender_start_batch_checked(ba, mb_ptr)
+        self.assertEqual(rc, 0)
+        mb = mb_ptr[0]
         lib.mmapq_mutable_batch_append(mb, b"hello", 5)
         off = lib.mmapq_mutable_batch_complete(mb)
         lib.mmapq_indexed_batch_appender_commit_batch(ba, off)
@@ -1272,7 +1294,10 @@ class TestTransfer(unittest.TestCase):
         rc = lib.mmapq_indexed_batch_queue_create_appender(bq, ba_ptr)
         self.assertEqual(rc, 0)
         ba = ba_ptr[0]
-        mb = lib.mmapq_indexed_batch_appender_start_batch(ba)
+        mb_ptr = ffi.new("MmapqMutableBatch **")
+        rc = lib.mmapq_indexed_batch_appender_start_batch_checked(ba, mb_ptr)
+        self.assertEqual(rc, 0)
+        mb = mb_ptr[0]
         lib.mmapq_mutable_batch_append(mb, b"test", 4)
         off = lib.mmapq_mutable_batch_complete(mb)
         lib.mmapq_indexed_batch_appender_commit_batch(ba, off)

@@ -173,7 +173,7 @@ ffi.cdef("""
         MmapqBatchPayloadIterator*, int64_t, int32_t, int32_t);
 
     /* ── Batch appender ──────────────────────────────────────────────────── */
-    MmapqMutableBatch* mmapq_indexed_batch_appender_start_batch(MmapqIndexedBatchAppender*);
+    int           mmapq_indexed_batch_appender_start_batch_checked(MmapqIndexedBatchAppender*, MmapqMutableBatch**);
     int64_t       mmapq_mutable_batch_complete(MmapqMutableBatch*);
     int64_t       mmapq_mutable_batch_complete_uncommitted(MmapqMutableBatch*);
     int           mmapq_mutable_batch_discard(MmapqMutableBatch*);
