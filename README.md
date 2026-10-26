@@ -22,9 +22,9 @@ capability the whole architecture exists for: **replay is the product.**
 Copy a queue directory from production to a laptop and re-read it from index
 zero — the same operation that drives recovery and replication is also how
 you debug, backtest, and audit. "What did command K do" is a single indexed
-read from a Python script. `doc/event-sourcing-guide.md` in the
+read from a Python script. `doc/guide/event-sourcing.md` in the
 [mmapq](https://github.com/algoteq-labs/mmapq) repository describes the
-full pattern; `doc/feature-matrix.md` gives exact coverage across C, Rust,
+full pattern; `doc/reference/feature-matrix.md` gives exact coverage across C, Rust,
 and Python.
 
 ## Quick start
@@ -417,7 +417,7 @@ compatible with upstream tools4j — the formats have diverged). Sharing
 queues with Java is not supported in 0.2.0: Java-written queues are
 refused at open (schema_version 1), both queue types; planned at schema
 2, under the same protocol contract (see the C library's
-`doc/wire-format.md`).
+`doc/reference/wire-format.md`).
 
 ## Stability
 
@@ -493,5 +493,5 @@ Ordinary `read()` continues to return owned bytes. Raw FFI access
 and external modification/truncation of committed files remain caller obligations.
 
 Commit publishes data, but does not guarantee power-loss durability. See the
-[C persistence contract](https://github.com/algoteq-labs/mmapq/blob/main/doc/persistence-contract.md) for restart,
+[C persistence contract](https://github.com/algoteq-labs/mmapq/blob/main/doc/reference/persistence-contract.md) for restart,
 checkpoint, filesystem, and archival limitations.

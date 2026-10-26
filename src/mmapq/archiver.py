@@ -73,7 +73,7 @@ class IndexedArchiver:
         them yourself, they are safe provided no undo (archive_up_to_index
         below the current start_index) runs between this call and your last
         unlink. An undo that ran before this call is harmless, because the
-        listing already reflects it (see doc/archiving-design.md).
+        listing already reflects it (see doc/design/archiving-design.md).
         """
         max_paths = 256
         arr = ffi.new("char *[256]")
