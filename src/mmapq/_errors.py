@@ -33,6 +33,11 @@ class SchemaMismatchError(MmapqError):
     divides its region_size)."""
 
 
+class QueueNotReadyError(MmapqError):
+    """The queue metadata is not yet ready (absent, incomplete, or a
+    mapping timeout). Transient — retry the same handle later."""
+
+
 class QueueExistsError(MmapqError):
     """The destination queue already exists and allow_append was not set."""
 
@@ -47,7 +52,7 @@ class MmapOutOfMemoryError(MmapqError):
 
 _RC_ERRORS = {
     -12: MmapqError,
-    -11: MmapqError,
+    -11: QueueNotReadyError,
     -10: MmapqError,
     -9: MmapOutOfMemoryError,
     -8: AppenderIdConflictError,

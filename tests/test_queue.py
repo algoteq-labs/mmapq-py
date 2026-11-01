@@ -26,6 +26,7 @@ from mmapq import (
     SchemaMismatchError,
     QueueExistsError,
     QueueCorruptError,
+    QueueNotReadyError,
     AppenderIdConflictError,
     ConflictBehavior,
     export_queue,
@@ -2108,6 +2109,143 @@ class TestCloseIdempotent(unittest.TestCase):
             IndexedQueue(ffi.NULL)
         with self.assertRaises(ValueError):
             IndexedBatchQueue(ffi.NULL)
+
+
+class TestC60ArchivableChecked(unittest.TestCase):
+    """CAND-60: archivable() distinguishes not-determinable from not-archivable."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_c60")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def _write_short_meta(self, name):
+        qdir = os.path.join(self.test_dir, name)
+        os.makedirs(qdir, exist_ok=True)
+        with open(os.path.join(qdir, "meta"), "wb") as f:
+            f.write(b"\x00" * 10)
+
+    def test_c60_queue_not_ready_error_importable(self):
+        self.assertTrue(issubclass(QueueNotReadyError, MmapqError))
+
+    def test_c60_archivable_missing_meta_raises_file_not_found(self):
+        arch = IndexedArchiver.create(self.test_dir, "c60_missing")
+        with self.assertRaises(FileNotFoundError):
+            arch.archivable()
+        arch.close()
+
+    def test_c60_archivable_short_meta_raises_not_ready(self):
+        self._write_short_meta("c60_short")
+        arch = IndexedArchiver.create(self.test_dir, "c60_short")
+        with self.assertRaises(QueueNotReadyError):
+            arch.archivable()
+        arch.close()
+
+    def test_c60_archivable_true_and_false(self):
+        q = IndexedQueue.create(self.test_dir, "c60_true", archivable=True)
+        a = q.create_appender()
+        a.append(b"m")
+        a.close()
+        arch = IndexedArchiver.create(self.test_dir, "c60_true")
+        self.assertTrue(arch.archivable())
+        arch.close()
+        q.close()
+
+        q = IndexedQueue.create(self.test_dir, "c60_false")
+        a = q.create_appender()
+        a.append(b"m")
+        a.close()
+        arch = IndexedArchiver.create(self.test_dir, "c60_false")
+        self.assertFalse(arch.archivable())
+        arch.close()
+        q.close()
+
+    def test_c60_archivable_sticky_raises(self):
+        bq = IndexedBatchQueue.create(self.test_dir, "c60_sticky", archivable=True)
+        a = bq.create_appender()
+        with a.start_batch() as w:
+            w.append(b"m")
+            w.commit()
+        a.close()
+        bq.close()
+
+        arch = IndexedArchiver.create(self.test_dir, "c60_sticky")
+        with self.assertRaises(SchemaMismatchError):
+            arch.archivable()
+        with self.assertRaises(SchemaMismatchError):
+            arch.archivable()
+        arch.close()
+
+    def test_c60_create_appender_not_ready_raises(self):
+        self._write_short_meta("c60_app")
+        q = IndexedQueue.create(self.test_dir, "c60_app")
+        with self.assertRaises(QueueNotReadyError):
+            q.create_appender()
+        q.close()
+
+    def test_c60_batch_archivable_missing_meta_raises_file_not_found(self):
+        bq = IndexedBatchQueue.create(self.test_dir, "c60b_missing")
+        arch = bq.create_archiver()
+        with self.assertRaises(FileNotFoundError):
+            arch.archivable()
+        arch.close()
+        bq.close()
+
+    def test_c60_batch_archivable_short_meta_raises_not_ready(self):
+        self._write_short_meta("c60b_short")
+        bq = IndexedBatchQueue.create(self.test_dir, "c60b_short")
+        arch = bq.create_archiver()
+        with self.assertRaises(QueueNotReadyError):
+            arch.archivable()
+        arch.close()
+        bq.close()
+
+    def test_c60_batch_archivable_true_and_false(self):
+        bq = IndexedBatchQueue.create(self.test_dir, "c60b_true", archivable=True)
+        a = bq.create_appender()
+        with a.start_batch() as w:
+            w.append(b"m")
+            w.commit()
+        a.close()
+        arch = bq.create_archiver()
+        self.assertTrue(arch.archivable())
+        arch.close()
+        bq.close()
+
+        bq = IndexedBatchQueue.create(self.test_dir, "c60b_false")
+        a = bq.create_appender()
+        with a.start_batch() as w:
+            w.append(b"m")
+            w.commit()
+        a.close()
+        arch = bq.create_archiver()
+        self.assertFalse(arch.archivable())
+        arch.close()
+        bq.close()
+
+    def test_c60_batch_archivable_sticky_raises(self):
+        q = IndexedQueue.create(self.test_dir, "c60b_sticky", archivable=True)
+        a = q.create_appender()
+        a.append(b"m")
+        a.close()
+        q.close()
+
+        bq = IndexedBatchQueue.create(self.test_dir, "c60b_sticky")
+        arch = bq.create_archiver()
+        with self.assertRaises(SchemaMismatchError):
+            arch.archivable()
+        with self.assertRaises(SchemaMismatchError):
+            arch.archivable()
+        arch.close()
+        bq.close()
+
+    def test_c60_batch_create_appender_not_ready_raises(self):
+        self._write_short_meta("c60b_app")
+        bq = IndexedBatchQueue.create(self.test_dir, "c60b_app")
+        with self.assertRaises(QueueNotReadyError):
+            bq.create_appender()
+        bq.close()
 
 
 if __name__ == "__main__":

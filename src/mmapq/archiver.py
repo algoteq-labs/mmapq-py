@@ -53,8 +53,20 @@ class IndexedArchiver:
         return cls(ptr[0])
 
     def archivable(self) -> bool:
-        """Return True if the queue was created with archivable=True."""
-        return bool(lib.mmapq_indexed_archiver_archivable(require_open(self._inner)))
+        """Return True if the queue was created with archivable=True.
+
+        Raises while the queue's metadata is not determinable yet; the
+        call is retryable on this same archiver — do not recreate it. The
+        retryable exceptions are FileNotFoundError (MMAPQ_ENOENT),
+        QueueNotReadyError (MMAPQ_ENOTREADY) and MmapqError (MMAPQ_ETIMEDOUT);
+        every other failure is terminal and raises the matching exception
+        via check_rc.
+        """
+        out = ffi.new("int *")
+        rc = lib.mmapq_indexed_archiver_archivable_checked(
+            require_open(self._inner), out)
+        check_rc(rc, "archivable")
+        return bool(out[0])
 
     def archive_up_to_index(self, index: int) -> None:
         """Archive all entries up to (but not including) the given index.
@@ -122,8 +134,20 @@ class IndexedBatchArchiver:
         self._finalizer = weakref.finalize(self, _destroy_batch_archiver, inner)
 
     def archivable(self) -> bool:
-        """Return True if the queue was created with archivable=True."""
-        return bool(lib.mmapq_indexed_batch_archiver_archivable(require_open(self._inner)))
+        """Return True if the queue was created with archivable=True.
+
+        Raises while the queue's metadata is not determinable yet; the
+        call is retryable on this same archiver — do not recreate it. The
+        retryable exceptions are FileNotFoundError (MMAPQ_ENOENT),
+        QueueNotReadyError (MMAPQ_ENOTREADY) and MmapqError (MMAPQ_ETIMEDOUT);
+        every other failure is terminal and raises the matching exception
+        via check_rc.
+        """
+        out = ffi.new("int *")
+        rc = lib.mmapq_indexed_batch_archiver_archivable_checked(
+            require_open(self._inner), out)
+        check_rc(rc, "archivable")
+        return bool(out[0])
 
     def archive_up_to_index(self, index: int) -> None:
         """Archive all batches up to (but not including) the given index."""

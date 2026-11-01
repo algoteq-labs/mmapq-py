@@ -11,11 +11,18 @@ carries only the binding-specific entries.
 
 ## Breaking (Python)
 
-- None beyond the C-level changes. The exception class set is unchanged;
-  existing `MmapqError` handlers keep catching.
+- `archivable()` now raises where 0.1.0/0.2.0 returned `False`. While the
+  queue's metadata is not determinable yet it raises `FileNotFoundError`
+  (`MMAPQ_ENOENT`), `QueueNotReadyError` (`MMAPQ_ENOTREADY`) or
+  `MmapqError` (`MMAPQ_ETIMEDOUT`) — all retryable on the same archiver;
+  every other failure is terminal. Existing `MmapqError` handlers keep
+  catching, since the new class subclasses `MmapqError`.
 
 ## New (Python)
 
+- New public exception `QueueNotReadyError(MmapqError)`, raised for
+  `MMAPQ_ENOTREADY` on every Python surface that can return it (not only
+  `archivable()`).
 - Uncommitted-message iteration on both queue types: `uncommitted`,
   `uncommitted_batches`.
 - Batch lifecycle: `join_completed_open_batch`, `complete_uncommitted`,
