@@ -409,7 +409,7 @@ class TestSingleQueue(unittest.TestCase):
         result = p.poll(handler)
         self.assertEqual(result, PollResult.ADVANCED)
         self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0][0], 0)
+        self.assertEqual(messages[0][0], 1)
         self.assertEqual(messages[0][2], b"hello")
 
         p.close()
