@@ -387,7 +387,7 @@ ffi.set_source(
 
 setup(
     name="mmapq",
-    version="0.1.0",
+    version="0.2.0.dev0",
     description="Python bindings for mmapq — low-latency memory-mapped queue",
     packages=["mmapq"],
     package_dir={"": "src"},
