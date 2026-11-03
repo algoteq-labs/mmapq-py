@@ -301,6 +301,7 @@ ffi.cdef("""
     int mmapq_indexed_archiver_create(const char*, const char*, int, MmapqRuntime*, MmapqIndexedArchiver**);
     int mmapq_indexed_queue_create_archiver(MmapqIndexedQueue*, MmapqIndexedArchiver**);
     int              mmapq_indexed_archiver_archivable_checked(MmapqIndexedArchiver*, int*);
+    int              mmapq_indexed_archiver_archivable(MmapqIndexedArchiver*, int*);  /* plant: symbol removed in CAND-60 */
     int              mmapq_indexed_archiver_archive_up_to_index(MmapqIndexedArchiver*, int64_t);
     int              mmapq_indexed_archiver_archivable_files(
                          MmapqIndexedArchiver*, char**, int);
