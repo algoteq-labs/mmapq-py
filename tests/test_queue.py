@@ -565,6 +565,86 @@ class TestArchivable(unittest.TestCase):
         q.close()
 
 
+class TestPollArchivedSurface(unittest.TestCase):
+    """POLL-ARCH-01 outcome-level pins: the ARCHIVED surface on every
+    consumer, after the archiver moves start_index past the index.
+
+    The mid-call race (the archiver reclaiming between the pre-read
+    start_index check and the read) is pinned in C
+    (c/test/test_poll_arch_pins.c); the shipped extension builds the C
+    mirror without test hooks by owner ruling, so these are the
+    outcome-level pins: archive past the index, then poll/read/
+    entry_status it. The batch poller's ARCHIVED surface is already
+    pinned in tests/test_recovery.py
+    (TestBatchRecovery.test_batch_archiver_forward_and_undo).
+    """
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_pollarch")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_single_poller_archived_after_archive(self):
+        q = IndexedQueue.create(self.test_dir, "q", archivable=True)
+        a = q.create_appender()
+        a.append(b"m0")
+        a.append(b"m1")
+        a.close()
+        p = q.create_poller()
+        # Poll once first: the poller initialises its cursor from
+        # start_index at first poll, so the archive must happen after the
+        # cursor exists (same shape as tests/test_recovery.py).
+        self.assertEqual(p.poll(lambda i, aid, data: NextMove.ADVANCE),
+                         PollResult.ADVANCED)
+        arch = q.create_archiver()
+        arch.archive_up_to_index(2)
+        arch.close()
+        # cursor 1 < start_index 2 → ARCHIVED, not an error
+        self.assertEqual(p.poll(lambda i, aid, data: NextMove.ADVANCE),
+                         PollResult.ARCHIVED)
+        p.close()
+        q.close()
+
+    def test_reader_archived_returns_none_and_status(self):
+        from mmapq.types import EntryStatus
+
+        q = IndexedQueue.create(self.test_dir, "q", archivable=True)
+        a = q.create_appender()
+        a.append(b"m0")
+        a.append(b"m1")
+        a.close()
+        r = IndexedReader.create(self.test_dir, "q")
+        self.assertEqual(r.read(0), b"m0")
+        arch = q.create_archiver()
+        arch.archive_up_to_index(1)
+        arch.close()
+        self.assertEqual(r.entry_status(0), EntryStatus.ARCHIVED)
+        self.assertIsNone(r.read(0))       # ARCHIVED collapses to None
+        self.assertEqual(r.read(1), b"m1")  # above the line, still readable
+        r.close()
+        q.close()
+
+    def test_batch_reader_archived_returns_none_and_status(self):
+        from mmapq.types import BatchEntryStatus
+
+        q = IndexedBatchQueue.create(self.test_dir, "bq", archivable=True)
+        a = q.create_appender()
+        w = a.start_batch()
+        w.append(b"m0")
+        self.assertEqual(w.commit(), 0)
+        a.close()
+        r = IndexedBatchReader.create(self.test_dir, "bq")
+        self.assertEqual(r.read(0), [b"m0"])
+        arch = q.create_archiver()
+        arch.archive_up_to_index(1)
+        arch.close()
+        self.assertEqual(r.entry_status(0), BatchEntryStatus.ARCHIVED)
+        self.assertIsNone(r.read(0))       # ARCHIVED collapses to None
+        r.close()
+        q.close()
+
+
 class TestQueueType(unittest.TestCase):
     """Tests for queue_type discriminator rejection."""
 
