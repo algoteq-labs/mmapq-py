@@ -31,6 +31,7 @@ def unsafe_lib():
 from ._errors import (
     MmapqError,
     AppenderIdConflictError,
+    ArchivedError,
     MmapOutOfMemoryError,
     QueueClosedError,
     QueueCorruptError,
@@ -101,6 +102,7 @@ __all__ = [
     "QueueExistsError",
     "AppenderIdConflictError",
     "MmapOutOfMemoryError",
+    "ArchivedError",
     "check_rc",
     "unsafe_ffi",
     "unsafe_lib",

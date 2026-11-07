@@ -10,7 +10,8 @@ from typing import Optional
 from . import _cffi as _cffi_mod
 from ._borrowed_buffer import make_view
 from ._cdata import require_cdata, require_open
-from ._errors import MmapqError, QueueClosedError, QueueCorruptError, check_rc
+from ._errors import ArchivedError, MmapqError, QueueClosedError, QueueCorruptError, check_rc
+from .types import BatchEntryStatus
 from .types import EntryStatus  # noqa: F401  (re-exported for compatibility)
 
 ffi = _cffi_mod.ffi
@@ -93,8 +94,9 @@ class IndexedReader:
         """Read the entry at the given index.
 
         Returns the payload bytes if the entry exists, or None if the
-        index is beyond the last committed entry or has been archived.
-        Raises QueueCorruptError on corruption, RuntimeError on I/O error.
+        index is not yet written. Raises ArchivedError (with ``.index``) if
+        the index is below the queue's start index, QueueCorruptError on
+        corruption, MmapqError on I/O error.
         """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
@@ -104,14 +106,14 @@ class IndexedReader:
 
     @_reader_operation
     def read_first(self) -> Optional[bytes]:
-        """Read the first unarchived entry (at start_index)."""
+        """Read the first unarchived entry (at start_index). Outcomes as for read()."""
         self._check_open()
         lib.mmapq_indexed_reader_read_first(self._inner, self._ctx)
         return self._extract()
 
     @_reader_operation
     def read_last(self) -> Optional[bytes]:
-        """Read the last committed entry."""
+        """Read the last committed entry. Outcomes as for read()."""
         self._check_open()
         lib.mmapq_indexed_reader_read_last(self._inner, self._ctx)
         return self._extract()
@@ -124,6 +126,8 @@ class IndexedReader:
         and close raise BufferError until this view and all aliases are
         released. Use view.release() or a memoryview context manager.
         Copy with bytes(view) when independent ownership is needed.
+        Returns None if the index is not yet written; raises ArchivedError
+        if it is below the queue's start index.
         """
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
@@ -179,7 +183,8 @@ class IndexedReader:
         if status == EntryStatus.END_OF_STREAM:
             return
         if status == EntryStatus.ARCHIVED:
-            return
+            self._last_read_valid = False
+            raise ArchivedError(self._ctx.index)
         if status == EntryStatus.AVAILABLE:
             return
         if status == EntryStatus.ERROR:
@@ -233,7 +238,8 @@ class IndexedBatchReader:
     """Random-access reader for an indexed batch queue.
 
     Reads any committed batch by index. Each read() returns a list of
-    message payload bytes, or None if no batch exists at the given index.
+    message payload bytes, None if no batch is written at the given index
+    yet, or raises ArchivedError if the index is below the start index.
     Thread-confined. One per consumer thread.
     """
 
@@ -271,34 +277,32 @@ class IndexedBatchReader:
         """Read the batch at the given index.
 
         Returns a list of payload bytes (one per message) if the batch
-        exists, or None if the index is beyond the last committed batch
-        or has been archived.
+        exists, or None if the index is not yet written. Raises
+        ArchivedError (with ``.index``) if the index is below the queue's
+        start index.
         """
         self._check_open()
         lib.mmapq_indexed_batch_reader_read(self._inner, index, self._ctx)
         return self._extract_batch()
 
     def read_first(self) -> Optional[list[bytes]]:
-        """Read the first unarchived batch (at start_index)."""
+        """Read the first unarchived batch (at start_index). Outcomes as for read()."""
         self._check_open()
         lib.mmapq_indexed_batch_reader_read_first(self._inner, self._ctx)
         return self._extract_batch()
 
     def read_last(self) -> Optional[list[bytes]]:
-        """Read the last committed batch."""
+        """Read the last committed batch. Outcomes as for read()."""
         self._check_open()
         lib.mmapq_indexed_batch_reader_read_last(self._inner, self._ctx)
         return self._extract_batch()
 
-    def entry_status(self, index: int) -> int:
-        """Check availability of the batch at the given index.
-
-        Returns a BatchEntryStatus value.
-        """
+    def entry_status(self, index: int) -> BatchEntryStatus:
+        """Check availability of the batch at the given index."""
         if index < 0:
             raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
-        return lib.mmapq_indexed_batch_reader_entry_status(self._inner, index)
+        return BatchEntryStatus(lib.mmapq_indexed_batch_reader_entry_status(self._inner, index))
 
     def batch_appender_id(self) -> int:
         """Return the appender ID of the last batch read.
@@ -340,7 +344,6 @@ class IndexedBatchReader:
             raise QueueClosedError("IndexedBatchReader is closed")
 
     def _extract_batch(self) -> Optional[list[bytes]]:
-        from .types import BatchEntryStatus
         from .batch_poller import iter_batch_messages
         status = self._ctx.status
         if status == BatchEntryStatus.AVAILABLE:
@@ -356,9 +359,10 @@ class IndexedBatchReader:
             return messages
         else:
             self._last_read_valid = False
-        if status in (BatchEntryStatus.END_OF_STREAM,
-                      BatchEntryStatus.ARCHIVED):
+        if status == BatchEntryStatus.END_OF_STREAM:
             return None
+        if status == BatchEntryStatus.ARCHIVED:
+            raise ArchivedError(self._ctx.index)
         if status == BatchEntryStatus.ERROR:
             rc = lib.mmapq_indexed_batch_reader_last_error(self._inner)
             if rc != 0:

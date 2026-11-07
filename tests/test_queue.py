@@ -518,8 +518,12 @@ class TestErrors(unittest.TestCase):
     def test_exception_types_importable(self):
         from mmapq import (MmapqError, MmapOutOfMemoryError, QueueClosedError,
                            QueueCorruptError, SchemaMismatchError, QueueExistsError,
-                           AppenderIdConflictError)
+                           AppenderIdConflictError, ArchivedError)
         self.assertTrue(issubclass(MmapqError, RuntimeError))
+        self.assertTrue(issubclass(ArchivedError, MmapqError))
+        self.assertTrue(issubclass(ArchivedError, LookupError))
+        import mmapq
+        self.assertIn("ArchivedError", mmapq.__all__)
         self.assertTrue(issubclass(MmapOutOfMemoryError, MmapqError))
         self.assertTrue(issubclass(QueueClosedError, MmapqError))
         self.assertTrue(issubclass(QueueCorruptError, MmapqError))
@@ -606,7 +610,10 @@ class TestPollArchivedSurface(unittest.TestCase):
         p.close()
         q.close()
 
-    def test_reader_archived_returns_none_and_status(self):
+    def test_reader_archived_raises_archived_error(self):
+        """E3: an archived index raises ArchivedError carrying the index;
+        None is kept for an index that is not yet written."""
+        from mmapq import ArchivedError, MmapqError
         from mmapq.types import EntryStatus
 
         q = IndexedQueue.create(self.test_dir, "q", archivable=True)
@@ -616,31 +623,59 @@ class TestPollArchivedSurface(unittest.TestCase):
         a.close()
         r = IndexedReader.create(self.test_dir, "q")
         self.assertEqual(r.read(0), b"m0")
+        self.assertIsNone(r.read(2))       # not yet written
         arch = q.create_archiver()
         arch.archive_up_to_index(1)
         arch.close()
         self.assertEqual(r.entry_status(0), EntryStatus.ARCHIVED)
-        self.assertIsNone(r.read(0))       # ARCHIVED collapses to None
+        self.assertEqual(r.read(1), b"m1")  # a valid read just before ...
+        with self.assertRaises(ArchivedError) as cm:
+            r.read(0)
+        self.assertEqual(cm.exception.index, 0)
+        self.assertIsInstance(cm.exception, LookupError)
+        self.assertIsInstance(cm.exception, MmapqError)
+        # ... must not leave a stale "last read" for appender_id()
+        with self.assertRaises(MmapqError):
+            r.appender_id()
+        with self.assertRaises(ArchivedError) as cm:
+            r.read_view(0)
+        self.assertEqual(cm.exception.index, 0)
+        self.assertEqual(r.read_first(), b"m1")
         self.assertEqual(r.read(1), b"m1")  # above the line, still readable
+        self.assertIsNone(r.read(2))       # still not written, not archived
         r.close()
         q.close()
 
-    def test_batch_reader_archived_returns_none_and_status(self):
+    def test_batch_reader_archived_raises_archived_error(self):
+        """E3: an archived batch index raises ArchivedError carrying the
+        index; None is kept for a batch that is not yet written."""
+        from mmapq import ArchivedError, MmapqError
         from mmapq.types import BatchEntryStatus
 
         q = IndexedBatchQueue.create(self.test_dir, "bq", archivable=True)
         a = q.create_appender()
-        w = a.start_batch()
-        w.append(b"m0")
-        self.assertEqual(w.commit(), 0)
+        for expected, payload in ((0, b"m0"), (1, b"m1")):
+            w = a.start_batch()
+            w.append(payload)
+            self.assertEqual(w.commit(), expected)
         a.close()
         r = IndexedBatchReader.create(self.test_dir, "bq")
         self.assertEqual(r.read(0), [b"m0"])
+        self.assertIsNone(r.read(2))       # not yet written
         arch = q.create_archiver()
         arch.archive_up_to_index(1)
         arch.close()
-        self.assertEqual(r.entry_status(0), BatchEntryStatus.ARCHIVED)
-        self.assertIsNone(r.read(0))       # ARCHIVED collapses to None
+        status = r.entry_status(0)
+        self.assertIs(type(status), BatchEntryStatus)
+        self.assertIs(status, BatchEntryStatus.ARCHIVED)
+        with self.assertRaises(ArchivedError) as cm:
+            r.read(0)
+        self.assertEqual(cm.exception.index, 0)
+        with self.assertRaises(MmapqError):
+            r.batch_appender_id()
+        self.assertEqual(r.read_first(), [b"m1"])
+        self.assertEqual(r.read(1), [b"m1"])  # above the line, still readable
+        self.assertIsNone(r.read(2))       # still not written, not archived
         r.close()
         q.close()
 

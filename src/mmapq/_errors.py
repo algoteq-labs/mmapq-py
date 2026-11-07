@@ -49,6 +49,22 @@ class MmapOutOfMemoryError(MmapqError):
     """Internal allocation failure (calloc, strdup, etc.). Back off, do not retry hot-loop."""
 
 
+class ArchivedError(MmapqError, LookupError):
+    """A reader's read resolved to an index below the queue's start index.
+
+    ``index`` is the index the read resolved to. An archived index stays
+    unreadable unless an archiver undo lowers the start index again; an
+    index that is merely not yet written reads as None instead. ARCHIVED is
+    an entry status in C, not a return code, so this class has no
+    _RC_ERRORS entry.
+    """
+
+    def __init__(self, index: int, message: str | None = None):
+        super().__init__(message if message is not None
+                         else f"index {index} is archived (below the queue's start index)")
+        self.index = index
+
+
 
 _RC_ERRORS = {
     -12: MmapqError,

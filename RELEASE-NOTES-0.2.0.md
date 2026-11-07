@@ -17,6 +17,16 @@ carries only the binding-specific entries.
   `MmapqError` (`MMAPQ_ETIMEDOUT`) — all retryable on the same archiver;
   every other failure is terminal. Existing `MmapqError` handlers keep
   catching, since the new class subclasses `MmapqError`.
+- `IndexedReader.read` / `read_first` / `read_last` / `read_view` and
+  `IndexedBatchReader.read` / `read_first` / `read_last` raise the new
+  `ArchivedError(MmapqError, LookupError)` when the index is below the
+  queue's start index, carrying it as `.index`; they returned `None`
+  before. `None` now means only "not yet written". Code that treated
+  `None` as "skip" should catch `ArchivedError` (or `LookupError`).
+  `entry_status()` and the pollers are unchanged.
+- `IndexedBatchReader.entry_status()` returns `BatchEntryStatus` instead
+  of a plain `int`, matching `IndexedReader.entry_status()`. Values and
+  equality with the old integers are unchanged (`IntEnum`).
 
 ## New (Python)
 

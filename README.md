@@ -99,6 +99,21 @@ with IndexedBatchReader.create("./data", "events") as reader:
 export_batch_queue("./data", "events", "./data/events.mmapq")
 ```
 
+A read returns `None` only when the index is not yet written. An index below
+the queue's start index (archived) raises `ArchivedError`, a `LookupError`
+carrying `.index`:
+
+```python
+from mmapq import ArchivedError, IndexedBatchReader
+
+with IndexedBatchReader.create("./data", "events") as reader:
+    assert reader.read(reader.last_index() + 1) is None  # not yet written
+    try:
+        reader.read(0)
+    except ArchivedError as err:  # only once start_index has passed 0
+        print("archived:", err.index)
+```
+
 For single-message queues use `IndexedReader` and `export_queue` instead.
 
 ### Recovery — uncommitted messages and batches
