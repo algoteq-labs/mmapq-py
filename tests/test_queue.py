@@ -711,6 +711,29 @@ class TestQueueType(unittest.TestCase):
         with self.assertRaises(SchemaMismatchError):
             r.read(0)
 
+    def test_reader_error_clears_last_read(self):
+        """A read that fails with ENTRY_ERROR must not leave the previous
+        read's appender_id() valid (the index is above C's 2^56-1 bound,
+        so C reports ENTRY_ERROR / MMAPQ_EINVAL after a valid read)."""
+        q = IndexedQueue.create(self.test_dir, "q")
+        a = q.create_appender()
+        a.append(b"m0")
+        a.close()
+        r = IndexedReader.create(self.test_dir, "q")
+        self.assertEqual(r.read(0), b"m0")
+        self.assertEqual(r.appender_id(), 0)
+        with self.assertRaises(ValueError):
+            r.read(1 << 56)
+        with self.assertRaises(MmapqError):
+            r.appender_id()
+        self.assertEqual(r.read(0), b"m0")
+        with self.assertRaises(ValueError):
+            r.read_view(1 << 56)
+        with self.assertRaises(MmapqError):
+            r.appender_id()
+        r.close()
+        q.close()
+
     def test_poller_wrong_type_raises_schema_mismatch(self):
         bq = IndexedBatchQueue.create(self.test_dir, "bbq")
         a = bq.create_appender()

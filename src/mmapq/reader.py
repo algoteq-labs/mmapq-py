@@ -139,7 +139,6 @@ class IndexedReader:
             view = make_view(ffi.buffer(self._ctx.data, self._ctx.length), self)
             self._view_lease = weakref.ref(view.obj)
             return view
-        self._last_read_valid = False
         return None
 
     @_reader_operation
@@ -179,11 +178,14 @@ class IndexedReader:
             raise QueueClosedError("IndexedReader is closed")
 
     def _check_status(self):
+        # Cleared before any raise: a failed read must not leave the
+        # previous read's appender_id() valid. Callers set it again only
+        # for an AVAILABLE result.
+        self._last_read_valid = False
         status = self._ctx.status
         if status == EntryStatus.END_OF_STREAM:
             return
         if status == EntryStatus.ARCHIVED:
-            self._last_read_valid = False
             raise ArchivedError(self._ctx.index)
         if status == EntryStatus.AVAILABLE:
             return
@@ -217,7 +219,6 @@ class IndexedReader:
         if self._ctx.status == EntryStatus.AVAILABLE:
             self._last_read_valid = True
             return bytes(ffi.buffer(self._ctx.data, self._ctx.length))
-        self._last_read_valid = False
         return None
 
     def __enter__(self):
