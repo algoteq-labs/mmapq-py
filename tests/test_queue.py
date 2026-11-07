@@ -734,6 +734,22 @@ class TestQueueType(unittest.TestCase):
         r.close()
         q.close()
 
+    def test_batch_reader_rejects_negative_index_before_c(self):
+        """Validation parity with IndexedReader: a negative index is
+        rejected in Python (C would also reject it, with EINVAL)."""
+        q = IndexedBatchQueue.create(self.test_dir, "bq")
+        a = q.create_appender()
+        w = a.start_batch()
+        w.append(b"m0")
+        self.assertEqual(w.commit(), 0)
+        a.close()
+        r = IndexedBatchReader.create(self.test_dir, "bq")
+        with self.assertRaisesRegex(ValueError, r"^index must be >= 0, got -1$"):
+            r.read(-1)
+        self.assertEqual(r.read(0), [b"m0"])
+        r.close()
+        q.close()
+
     def test_poller_wrong_type_raises_schema_mismatch(self):
         bq = IndexedBatchQueue.create(self.test_dir, "bbq")
         a = bq.create_appender()

@@ -282,6 +282,8 @@ class IndexedBatchReader:
         ArchivedError (with ``.index``) if the index is below the queue's
         start index.
         """
+        if index < 0:
+            raise ValueError(f"index must be >= 0, got {index}")
         self._check_open()
         lib.mmapq_indexed_batch_reader_read(self._inner, index, self._ctx)
         return self._extract_batch()
