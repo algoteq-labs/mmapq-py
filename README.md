@@ -445,7 +445,7 @@ import into a fresh 0.2.0 queue — the export stream format is unchanged.
 Each release states the schema versions it reads; a file of any other
 version is refused at open. A version change is always a clean refusal,
 never a silent misread. The feature set is frozen and the API grows only
-to complete parity with the Algoteq Java reference. The Python bindings
+for capability already present in the C core. The Python bindings
 expose the producer/consumer and replay surface; some low-level batch
 construction primitives remain C/Rust only (see `doc/reference/feature-matrix.md`).
 
