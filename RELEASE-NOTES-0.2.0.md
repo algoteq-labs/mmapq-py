@@ -11,7 +11,7 @@ carries only the binding-specific entries.
 
 ## Breaking (Python)
 
-- `archivable()` now raises where 0.1.0/0.2.0 returned `False`. While the
+- `archivable()` now raises where 0.1.0 returned `False`. While the
   queue's metadata is not determinable yet it raises `FileNotFoundError`
   (`MMAPQ_ENOENT`), `QueueNotReadyError` (`MMAPQ_ENOTREADY`) or
   `MmapqError` (`MMAPQ_ETIMEDOUT`) — all retryable on the same archiver;
@@ -38,6 +38,7 @@ carries only the binding-specific entries.
 - Batch lifecycle: `join_completed_open_batch`, `complete_uncommitted`,
   `commit_batch`.
 - `mmapq-ids` operator tool (in the C repository's `tools/`).
+- `mmapq.__version__`, the package version string.
 
 ## Fixed (Python)
 
@@ -47,9 +48,27 @@ carries only the binding-specific entries.
 - Export errors are preserved during output cleanup; transfer mapper
   exceptions propagate to the caller instead of being swallowed.
 - Reader view borrowing enforced; context exceptions preserved.
+- `IndexedReader.appender_id()` after a failed read raises instead of
+  reporting the previous read's appender.
+
+## Packaging (Python)
+
+- The package is still published as a source distribution only:
+  installing it builds the C extension and needs a C compiler. Wheels are
+  planned.
+- `cffi>=1.17.1` is now a declared minimum (it was unpinned). Building from
+  source needs `setuptools>=77.0.3`, which pip installs automatically in
+  its default isolated build.
+- The license metadata is the SPDX expression `BSD-3-Clause`.
 
 ## Hardening (Python)
 
 - Closed-handle and closed-runtime rejection, callback-result validation,
   no poller reentry or callback-time close, no duplicate appender
   cleanup, no overlapping batch writers.
+
+## Known limitations (Python)
+
+- `BatchWriter.append_remaining_from` needs a source batch iterator that
+  the Python API does not expose yet (planned); see its docstring.
+- The C library's known limitations apply (C notes, "Known limitations").
