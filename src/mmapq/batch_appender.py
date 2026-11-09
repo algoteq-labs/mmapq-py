@@ -59,6 +59,11 @@ class BatchWriter:
         Raises ValueError if a message exceeds the destination queue's
         region_size — the batch is partially populated and must be
         discarded, not committed.
+
+        No public mmapq API returns a MmapqBatchPayloadIterator: batch poller
+        handlers and IndexedBatchReader.read() deliver list[bytes]. To copy a
+        received batch, append each message (``for m in messages: w.append(m)``).
+        This method is reachable only through ``unsafe_lib()``.
         """
         self._check_open()
         require_cdata(it, "struct MmapqBatchPayloadIterator *", "append_remaining_from")
