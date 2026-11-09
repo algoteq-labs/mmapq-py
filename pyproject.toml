@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools", "cffi"]
+requires = ["setuptools>=77.0.3", "cffi>=1.17.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mmapq"
-version = "0.2.0.dev0"
+dynamic = ["version"]
 description = "Python bindings for mmapq — low-latency memory-mapped queue"
 requires-python = ">=3.10"
-license = {text = "BSD-3-Clause"}
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 authors = [
     { name = "Anton Anufriev" },
 ]
@@ -24,12 +25,15 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: System :: Distributed Computing",
 ]
-dependencies = ["cffi"]
+dependencies = ["cffi>=1.17.1"]
 
 [project.urls]
 Homepage = "https://github.com/algoteq-labs/mmapq"
 Source = "https://github.com/algoteq-labs/mmapq-py"
 BugTracker = "https://github.com/algoteq-labs/mmapq-py/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "mmapq._version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

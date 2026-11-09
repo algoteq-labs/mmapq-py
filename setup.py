@@ -386,14 +386,10 @@ ffi.set_source(
 )
 
 setup(
-    name="mmapq",
-    version="0.2.0.dev0",
-    description="Python bindings for mmapq — low-latency memory-mapped queue",
     packages=["mmapq"],
     package_dir={"": "src"},
     ext_modules=[ffi.distutils_extension(), Extension(
         "mmapq._borrowed_buffer", ["src/mmapq/_borrowed_buffer.c"],
         extra_compile_args=["-std=c11", "-Wall", "-Wextra"],
     )],
-    python_requires=">=3.10",
 )

@@ -1,6 +1,6 @@
 # mmapq
 
-[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/algoteq-labs/mmapq-py/blob/main/LICENSE)
 
 **Python bindings for [mmapq](https://github.com/algoteq-labs/mmapq)** — a persistent,
 indexed, replayable inter-process queue backed by memory-mapped files. No
@@ -465,7 +465,7 @@ event-sourcing architecture follows
 
 ## License
 
-BSD 3-Clause — see [LICENSE](LICENSE).
+BSD 3-Clause — see [LICENSE](https://github.com/algoteq-labs/mmapq-py/blob/main/LICENSE).
 
 ## Platform
 

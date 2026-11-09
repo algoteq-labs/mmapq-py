@@ -1,6 +1,7 @@
 """mmapq — Python bindings for the mmapq batch queue."""
 
 from . import _cffi as _cffi_mod
+from ._version import __version__
 
 # The raw cffi FFI and lib objects are private. Every C symbol reachable
 # through them has no argument checking — one bad call segfaults the
