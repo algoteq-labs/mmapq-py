@@ -20,9 +20,15 @@ concurrency:
 jobs:
   python:
     name: Python tests (committed gitlink)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 50
     steps:
+      - name: Platform (ARM64 trial)
+        run: |
+          uname -m
+          nproc
+          lscpu | grep -E '^(Architecture|Vendor ID|Model name)' || true
+          test "$(uname -m)" = aarch64
       - name: Checkout mmapq-py (committed gitlink)
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -52,9 +58,15 @@ jobs:
 
   sdist:
     name: Package (sdist)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
     steps:
+      - name: Platform (ARM64 trial)
+        run: |
+          uname -m
+          nproc
+          lscpu | grep -E '^(Architecture|Vendor ID|Model name)' || true
+          test "$(uname -m)" = aarch64
       - name: Checkout mmapq-py (committed gitlink)
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
