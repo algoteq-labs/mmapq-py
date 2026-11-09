@@ -44,3 +44,8 @@ jobs:
           "$RUNNER_TEMP/venv/bin/pip" install --upgrade pip cffi setuptools wheel
           "$RUNNER_TEMP/venv/bin/pip" install -e . --force-reinstall -q
           "$RUNNER_TEMP/venv/bin/python" -m unittest discover -s tests -v
+      - name: Binding coverage gate (every public binding method directly tested)
+        shell: bash
+        run: |
+          export PATH="$RUNNER_TEMP/venv/bin:$PATH"
+          bash c/scripts/check_binding_coverage.sh --python .
