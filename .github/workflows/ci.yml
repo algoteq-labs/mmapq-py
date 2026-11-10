@@ -89,3 +89,15 @@ jobs:
           cd "$RUNNER_TEMP" && "$RUNNER_TEMP/v2/bin/pip" install --no-build-isolation "$RUNNER_TEMP"/dist/mmapq-*.tar.gz
           "$RUNNER_TEMP/v2/bin/pip" list | grep -iE '^(setuptools|cffi) '
           "$RUNNER_TEMP/v2/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py" "$v"
+      - name: Install with GCC 14 in a clean venv and smoke-test
+        shell: bash
+        run: |
+          sudo apt-get install -y gcc-14
+          gcc-14 --version | head -1
+          v=$(python3 -I -c 'import re,sys; print(re.search(r"__version__ = \"([^\"]+)\"", open("src/mmapq/_version.py").read()).group(1))')
+          python3 -m venv "$RUNNER_TEMP/v3"
+          # --no-cache-dir: the earlier steps built a wheel from this same sdist; a cached
+          # wheel would install without compiling anything and the step would test nothing.
+          cd "$RUNNER_TEMP" && CC=gcc-14 "$RUNNER_TEMP/v3/bin/pip" install -v --no-cache-dir "$RUNNER_TEMP"/dist/mmapq-*.tar.gz 2>&1 | tee "$RUNNER_TEMP/gcc14.log"
+          grep -qE 'gcc-14 .*_cffi\.c' "$RUNNER_TEMP/gcc14.log" || { echo "the extension was not compiled with gcc-14"; exit 1; }
+          "$RUNNER_TEMP/v3/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py" "$v"
