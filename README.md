@@ -45,7 +45,7 @@ storage and backup policy.
 from pathlib import Path
 from mmapq import IndexedQueue, NextMove
 
-Path("./data").mkdir(exist_ok=True)
+Path("./data").mkdir(exist_ok=True)  # the base directory must exist
 
 def handler(index, appender_id, data):
     print(f"[{index}] {data!r}")
@@ -65,7 +65,7 @@ with IndexedQueue.create("./data", "my_queue") as queue:
 from pathlib import Path
 from mmapq import IndexedBatchQueue
 
-Path("./data").mkdir(exist_ok=True)
+Path("./data").mkdir(exist_ok=True)  # the base directory must exist
 with IndexedBatchQueue.create("./data", "events") as queue:
     with queue.create_appender() as appender:
         with appender.start_batch() as batch:
@@ -138,11 +138,21 @@ that closed cleanly released its ID.
 ```python
 from mmapq import IndexedQueue
 
+
+def is_valid(data):
+    # The application's own integrity check — for example a checksum or a
+    # sequence number carried in the payload; the library has none.
+    return len(data) > 0  # replace with your check
+
+
 with IndexedQueue.create("./data", "my_queue") as queue:
     with queue.create_appender_with_id(0) as appender:  # this writer's fixed lane
         for offset, data in appender.uncommitted():
             print(f"recovered {len(data)} bytes at {offset}")
-            appender.commit(offset)  # publish; skipping is also valid
+            # A crash can leave a record torn, and a torn record reappears in
+            # every later walk: commit only what your own check accepts.
+            if is_valid(data):
+                appender.commit(offset)  # publish; skipping is also valid
 
 # Batch lanes: appender.uncommitted_batches() yields (offset, messages);
 # appender.commit_batch(offset) publishes; appender.join_completed_open_batch()
@@ -201,6 +211,10 @@ by construction and never drifts independently.
 ```bash
 pip install mmapq
 ```
+
+On systems that mark the system Python as externally managed (PEP 668 —
+for example Ubuntu 24.04), install into a virtual environment:
+`python3 -m venv .venv && . .venv/bin/activate`.
 
 ### From source
 
@@ -354,7 +368,9 @@ An archivable queue (`archivable=True`) can advance its start index so old
 entries become inaccessible and their backing files can be safely deleted.
 The setting takes effect only if this handle creates the queue's first
 appender (see `create` above); an archiving process can check
-`arch.archivable()` first:
+`arch.archivable()` first. It raises a retryable `FileNotFoundError`,
+`QueueNotReadyError` or `MmapqError` until the queue's first appender has
+written its files — retry on the same archiver:
 
 ```python
 from mmapq import IndexedArchiver, IndexedQueue

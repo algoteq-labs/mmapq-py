@@ -100,6 +100,18 @@ class IndexedPoller:
         return bool(lib.mmapq_indexed_poller_move_to_start(require_open(self._inner)))
 
     def current_index(self) -> int:
+        """The index the next poll will read.
+
+        After a poll that delivered index i and advanced, it is i + 1;
+        after a successful move to index i, it is i. A poller that has
+        neither polled nor moved yet reports 0; its first poll positions
+        it at ``start_index()``.
+
+        Inside the poll handler it is still the delivered index: the
+        cursor moves after the handler returns. A snapshot taken there,
+        after applying the delivered entry, is identified by that
+        index + 1.
+        """
         return lib.mmapq_indexed_poller_current_index(require_open(self._inner))
 
     def start_index(self) -> int:
