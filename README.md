@@ -332,11 +332,7 @@ q = IndexedQueue.create("./data", "arch_q", archivable=True)
 arch = IndexedArchiver.create("./data", "arch_q")
 arch.archive_up_to_index(1000)          # archive entries < 1000
 files = arch.archivable_files()         # files no live entry can need
-for path in files:
-    # delete, compress, or move them — safe provided no undo
-    # (archive_up_to_index below the current start_index) runs between
-    # the archivable_files() call and your last unlink
-    pass
+deleted = arch.reclaim_files(files)   # safe even against a concurrent undo
 ```
 
 ### Transfer (export/import/copy)

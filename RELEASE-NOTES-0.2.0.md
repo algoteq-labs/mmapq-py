@@ -39,6 +39,8 @@ carries only the binding-specific entries.
   `commit_batch`.
 - `mmapq-ids` operator tool (in the C repository's `tools/`).
 - `mmapq.__version__`, the package version string.
+- `IndexedArchiver.reclaim_files` and `IndexedBatchArchiver.reclaim_files`: delete
+  files from an `archivable_files()` listing safely, even against a concurrent undo.
 
 ## Fixed (Python)
 
@@ -47,6 +49,8 @@ carries only the binding-specific entries.
   delivered a truncated message list with no error.
 - Export errors are preserved during output cleanup; transfer mapper
   exceptions propagate to the caller instead of being swallowed.
+- `archivable_files()` never freed the path strings the C library returned (a
+  small leak on every call); it now frees them.
 - Reader view borrowing enforced; context exceptions preserved.
 - `IndexedReader.appender_id()` after a failed read raises instead of
   reporting the previous read's appender.

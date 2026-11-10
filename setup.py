@@ -238,6 +238,7 @@ ffi.cdef("""
     /* ── libc helpers for FILE* I/O ───────────────────────────────────────────── */
     void* fopen(const char*, const char*);
     int   fclose(void*);
+    void  free(void*);
 
     /* ── Transfer (queue_transfer.h) ──────────────────────────────────────────── */
     typedef int (*MmapqQueueFilterFn)(int64_t, const void*, int32_t, void*);
@@ -304,6 +305,8 @@ ffi.cdef("""
     int              mmapq_indexed_archiver_archive_up_to_index(MmapqIndexedArchiver*, int64_t);
     int              mmapq_indexed_archiver_archivable_files(
                          MmapqIndexedArchiver*, char**, int);
+    int              mmapq_indexed_archiver_reclaim_files(
+                         MmapqIndexedArchiver*, char**, int);
     int64_t          mmapq_indexed_archiver_start_index(MmapqIndexedArchiver*);
     int              mmapq_indexed_archiver_print_summary(MmapqIndexedArchiver*, char*, int);
     void             mmapq_indexed_archiver_close(MmapqIndexedArchiver*);
@@ -312,6 +315,7 @@ ffi.cdef("""
     int  mmapq_indexed_batch_archiver_archivable_checked(MmapqIndexedBatchArchiver*, int*);
     int  mmapq_indexed_batch_archiver_archive_up_to_index(MmapqIndexedBatchArchiver*, int64_t);
     int  mmapq_indexed_batch_archiver_archivable_files(MmapqIndexedBatchArchiver*, char**, int);
+    int  mmapq_indexed_batch_archiver_reclaim_files(MmapqIndexedBatchArchiver*, char**, int);
     int64_t mmapq_indexed_batch_archiver_start_index(MmapqIndexedBatchArchiver*);
     int  mmapq_indexed_batch_archiver_start_offset(MmapqIndexedBatchArchiver*, uint8_t, int64_t*);
      void mmapq_indexed_batch_archiver_close(MmapqIndexedBatchArchiver*);
@@ -366,6 +370,7 @@ _rel_sources = [os.path.relpath(p, _script_dir) for p in c_sources]
 ffi.set_source(
     "mmapq._cffi",
     """
+    #include <stdlib.h>
     #include "mmap_platform.h"
     #include "batch_payload_iterator.h"
     #include "indexed_batch_queue.h"
