@@ -2402,5 +2402,185 @@ class TestC60ArchivableChecked(unittest.TestCase):
         bq.close()
 
 
+class TestSingleCreateConfig(unittest.TestCase):
+    """IndexedQueue.create sizing parameters (region_size, ring_size,
+    max_file_size, start_index, timeout_ns) and the first-appender
+    geometry rule."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(suffix="_mmap_single_cfg")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_geometry_written(self):
+        # Geometry: region_size=32768, max_file_size=65536 (two regions per
+        # file), async runtime (regions_to_map_ahead=1, so wrapping into a
+        # region premaps the next one). Payload framing: 4-byte length
+        # prefix + data, first position 64 (INITIAL_PAYLOAD_POSITION,
+        # header_codec.h) — message i (0-based) sits at 64 + i*1004, and
+        # message 99 ends at 100464, so payload regions 0..3 are written
+        # and the wrap into region 3 premaps region 4. Files: payload_0_0
+        # holds regions 0-1 and is extended to 65536; payload_0_1 holds
+        # regions 2-3, 65536; premapped region 4 opens payload_0_2 and
+        # extends it one region, 32768. Headers for indices 0..99 all sit
+        # in header region 0 (vertical walk, one 32 KB block); premap of
+        # header region 1 extends header_0 to 65536.
+        q = IndexedQueue.create(
+            self.test_dir, "g", archivable=True,
+            region_size=32768, max_file_size=65536,
+            runtime=Runtime.region_mapper())
+        a = q.create_appender()
+        for i in range(100):
+            self.assertEqual(a.append(b"m" * 1000), i)
+        a.close()
+        q.close()
+
+        qdir = os.path.join(self.test_dir, "g")
+        self.assertEqual(
+            sorted(os.listdir(qdir)),
+            ["appender_id_pool", "appender_meta_0", "header_0",
+             "meta", "payload_0_0", "payload_0_1", "payload_0_2"])
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_0")), 65536)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_1")), 65536)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_2")), 32768)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "header_0")), 65536)
+
+        # After archive_up_to_index(80) the lane's deletion bound is the end
+        # of archived message 79: 64 + 79*1004 + 1004 = 80400. payload_0_0
+        # ([0, 65536)) is wholly below it; payload_0_1 is not. Header file 0
+        # holds indices [0, 8192) (max_file_size/8 headers per file) — not
+        # wholly below 80. The listing must include a payload file: that is
+        # the point of the sizing parameters (the 0.1.0 hardcoded 1 GiB
+        # files reclaimed payload space only in 1 GiB steps per lane).
+        arch = IndexedArchiver.create(self.test_dir, "g")
+        self.assertIs(arch.archivable(), True)
+        arch.archive_up_to_index(80)
+        self.assertEqual(
+            sorted(arch.archivable_files()),
+            [os.path.join(self.test_dir, "g", "payload_0_0")])
+        arch.close()
+
+    def test_defaults_unchanged(self):
+        # Pin of the pre-change defaults, measured on the base tree:
+        # region_size 4 MiB, max_file_size region_size*256, sync mapping
+        # (no runtime, no premap). One 1000-byte append at position 64
+        # touches payload region 0 and header region 0 only, so both files
+        # are extended to exactly one region: 4194304.
+        q = IndexedQueue.create(self.test_dir, "d")
+        a = q.create_appender()
+        self.assertEqual(a.append(b"m" * 1000), 0)
+        a.close()
+        q.close()
+
+        qdir = os.path.join(self.test_dir, "d")
+        self.assertEqual(
+            sorted(os.listdir(qdir)),
+            ["appender_id_pool", "appender_meta_0", "header_0",
+             "meta", "payload_0_0"])
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_0")), 4194304)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "header_0")), 4194304)
+
+    def test_existing_queue_keeps_disk_geometry(self):
+        # Phase 1: region_size=32768, max_file_size=65536, sync mapping.
+        # 100 appends of 1000 bytes write payload regions 0..3 (message 99
+        # ends at 100464) with no premap: payload_0_0 and payload_0_1 are
+        # each 65536; header_0 (indices 0..99 all in header region 0) is
+        # one region, 32768.
+        q = IndexedQueue.create(
+            self.test_dir, "k", region_size=32768, max_file_size=65536)
+        a = q.create_appender()
+        for i in range(100):
+            self.assertEqual(a.append(b"m" * 1000), i)
+        a.close()
+        q.close()
+
+        # Phase 2: reopen with region_size=1 MiB and no max_file_size. The
+        # on-disk geometry (region 32768, file 65536) is authoritative, so
+        # new files follow it, not this handle's settings. Messages 100..199
+        # end at 64 + 199*1004 + 1004 = 200464: payload regions 4..6 open
+        # payload_0_2 (regions 4-5, 65536) and payload_0_3 (region 6,
+        # 32768). Header indices 100..199 stay in header region 0 (position
+        # of index 199 is ((199 % 64) * 64 + 199 // 64) * 8 = 3608), so
+        # header_0 stays 32768.
+        q = IndexedQueue.create(self.test_dir, "k", region_size=1024 * 1024)
+        a = q.create_appender()
+        for i in range(100):
+            self.assertEqual(a.append(b"m" * 1000), 100 + i)
+        a.close()
+        q.close()
+
+        qdir = os.path.join(self.test_dir, "k")
+        self.assertEqual(
+            sorted(os.listdir(qdir)),
+            ["appender_id_pool", "appender_meta_0", "header_0",
+             "meta", "payload_0_0", "payload_0_1", "payload_0_2",
+             "payload_0_3"])
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_0")), 65536)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_1")), 65536)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_2")), 65536)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "payload_0_3")), 32768)
+        self.assertEqual(
+            os.path.getsize(os.path.join(qdir, "header_0")), 32768)
+
+    def test_start_index(self):
+        q = IndexedQueue.create(self.test_dir, "s", start_index=1000)
+        a = q.create_appender()
+        self.assertEqual(a.append(b"m"), 1000)
+        a.close()
+        p = q.create_poller()
+        self.assertEqual(p.start_index(), 1000)
+        p.close()
+        q.close()
+
+    def test_archivable_positional(self):
+        # 0.1.0 call shape: archivable stays the 5th positional parameter.
+        q = IndexedQueue.create(self.test_dir, "p", None, None, True)
+        a = q.create_appender()
+        a.close()
+        q.close()
+        arch = IndexedArchiver.create(self.test_dir, "p")
+        self.assertIs(arch.archivable(), True)
+        arch.close()
+
+    def test_max_file_size_rejected(self):
+        for bad in (0, -1):
+            with self.assertRaises(ValueError):
+                IndexedQueue.create(self.test_dir, "m", max_file_size=bad)
+        self.assertEqual(os.listdir(self.test_dir), [])
+
+    def test_ring_size_and_timeout_accepted(self):
+        # Acceptance only: ring_size and timeout_ns reach C without error.
+        # No behavioural assertion of the two values is possible from
+        # Python (they shape mapping windows, not queue content); the
+        # geometry itself is pinned by test_geometry_written.
+        q = IndexedQueue.create(
+            self.test_dir, "rt", ring_size=2, timeout_ns=1_000_000_000)
+        a = q.create_appender()
+        self.assertEqual(a.append(b"payload"), 0)
+        a.close()
+        p = q.create_poller()
+        seen = []
+
+        def handler(idx, aid, data):
+            seen.append(data)
+            return NextMove.ADVANCE
+
+        self.assertEqual(p.poll(handler), PollResult.ADVANCED)
+        p.close()
+        q.close()
+        self.assertEqual(seen, [b"payload"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -32,14 +32,43 @@ class IndexedQueue:
 
     @classmethod
     def create(cls, directory, queue_name, write_runtime=None, read_runtime=None,
-               archivable=False, *, runtime=None):
-        """Create or open a queue with default configuration.
+               archivable=False, *, region_size=4096*1024, ring_size=4,
+               max_file_size=None, start_index=0, timeout_ns=10_000_000_000,
+               runtime=None):
+        """Create or open a queue.
 
-        directory:   path to the queue data directory
-        queue_name:  logical queue name
-        runtime:     optional Runtime for async region mapping (keyword-only)
-        archivable:  if True, create archivable (default False)
+        archivable, region_size, max_file_size and start_index apply only
+        when this handle creates the queue's first appender: the queue's
+        files are written then, with this handle's settings, and every
+        later open uses the stored values and ignores its own. ring_size
+        and timeout_ns apply to this handle. Create the queue and its first
+        appender in one place with the intended settings.
+
+        directory:      path to the queue data directory
+        queue_name:     logical queue name
+        write_runtime:  runtime for appender-side async region mapping
+        read_runtime:   runtime for poller/reader-side async region mapping
+        archivable:     if True, create archivable (positional, default False)
+        region_size:    payload region size in bytes (power of two and a
+                        multiple of 32 KB, and a multiple of the OS page size
+                        — the geometry rule; default 4 MB)
+        ring_size:      number of simultaneously mapped regions (default 4)
+        max_file_size:  max size of a single payload file (a multiple of
+                        region_size, therefore of the 32 KB header block); if
+                        None, computed as region_size * 256 (default 1 GB with
+                        default region_size)
+        start_index:    initial message index (default 0)
+        timeout_ns:     region-mapping timeout in nanoseconds (default 10 s)
+        runtime:        shared runtime for both sides (keyword-only)
+
+        All defaults match the C library's INDEXED_QUEUE_DEFAULT_* constants.
         """
+        if max_file_size is None:
+            max_file_size = region_size * 256
+        elif max_file_size <= 0:
+            raise ValueError(
+                f"max_file_size must be positive, got {max_file_size}")
+        regions_to_map_ahead = 1  # match INDEXED_QUEUE_DEFAULT_REGIONS_TO_MAP_AHEAD
         wr = require_open(write_runtime._inner) if write_runtime is not None else ffi.NULL
         rr = require_open(read_runtime._inner) if read_runtime is not None else ffi.NULL
         if runtime is not None:
@@ -49,8 +78,8 @@ class IndexedQueue:
         ptr = ffi.new("MmapqIndexedQueue **")
         rc = lib.mmapq_indexed_queue_create(
             directory.encode(), queue_name.encode(),
-            4096 * 1024, 4, 1, (4096 * 1024) * 256,
-            0, 10000000000, arch_int, wr, rr, ptr,
+            region_size, ring_size, regions_to_map_ahead, max_file_size,
+            start_index, timeout_ns, arch_int, wr, rr, ptr,
         )
         check_rc(rc, "mmapq_indexed_queue_create")
         q = cls(ptr[0], runtime=runtime)
@@ -79,7 +108,10 @@ class IndexedQueue:
         """Create an appender with a specific lane ID (0–255).
 
         Validates that the ID is in range before the FFI call.
-        Raises ValueError if the ID is out of range or already in use.
+        Raises ValueError if the ID is out of range, AppenderIdConflictError
+        if it is taken. A writer killed without closing leaves its ID taken
+        until an operator releases it (the mmapq-ids tool in the C
+        repository); one that closed released it.
         A transient mapping timeout during the appender's join walk
         surfaces as the base ``MmapqError`` (rc -1), not
         ``QueueCorruptError`` (D8; a distinct timeout exception class

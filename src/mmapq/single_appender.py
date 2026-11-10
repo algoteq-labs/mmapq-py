@@ -46,8 +46,9 @@ class IndexedAppender:
     def append_uncommitted(self, data: bytes) -> int:
         """Write a payload without committing it.
 
-        An uncommitted payload is invisible to all readers and is discarded
-        by crash recovery; only commit() publishes it.
+        An uncommitted payload is invisible to all readers until commit()
+        publishes it. After a crash only the lane's owner, rejoining the
+        same lane, can find it again (uncommitted()).
         Returns the payload offset (for later use with commit()).
         """
         require_open(self._inner)
@@ -60,8 +61,9 @@ class IndexedAppender:
     def commit(self, payload_offset: int) -> int:
         """Commit a previously uncommitted payload.
 
-        An uncommitted payload is invisible to all readers and is discarded
-        by crash recovery; only commit() publishes it.
+        An uncommitted payload is invisible to all readers until commit()
+        publishes it. After a crash only the lane's owner, rejoining the
+        same lane, can find it again (uncommitted()).
         Returns the committed index.
         """
         rc = lib.mmapq_indexed_appender_commit(require_open(self._inner), payload_offset)

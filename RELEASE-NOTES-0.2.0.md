@@ -41,6 +41,8 @@ carries only the binding-specific entries.
 - `mmapq.__version__`, the package version string.
 - `IndexedArchiver.reclaim_files` and `IndexedBatchArchiver.reclaim_files`: delete
   files from an `archivable_files()` listing safely, even against a concurrent undo.
+- `IndexedQueue.create` takes keyword-only `region_size`, `ring_size`,
+  `max_file_size`, `start_index` and `timeout_ns`, as `IndexedBatchQueue.create` does.
 
 ## Fixed (Python)
 

@@ -125,11 +125,21 @@ found offsets with `commit()` / `commit_batch()` — any subset, any order;
 skipping is fine. Archiving may remove messages the walk has not yielded,
 and discarded batches reappear in recovery — recovery code decides.
 
+After a crash, recover through the same lane. A writer that owns a fixed
+lane ID rejoins it with `create_appender_with_id(id)`; `create_appender()`
+takes a free lane, and its walk finds nothing of the crashed writer's. A
+writer killed without closing leaves its ID taken (`AppenderIdConflictError`)
+until an operator who has established that the owner is dead releases it
+with the `mmapq-ids` tool from the [mmapq](https://github.com/algoteq-labs/mmapq)
+repository (`make mmapq-ids`, then `mmapq-ids <dir> <queue> --unset <id>`);
+`doc/guide/05-crash-and-restart.md` there gives the procedure. A writer
+that closed cleanly released its ID.
+
 ```python
 from mmapq import IndexedQueue
 
 with IndexedQueue.create("./data", "my_queue") as queue:
-    with queue.create_appender() as appender:
+    with queue.create_appender_with_id(0) as appender:  # this writer's fixed lane
         for offset, data in appender.uncommitted():
             print(f"recovered {len(data)} bytes at {offset}")
             appender.commit(offset)  # publish; skipping is also valid
@@ -184,7 +194,7 @@ by construction and never drifts independently.
 | `MMAPQ_EIDCONFLICT` (-8) | `AppenderIdConflictError` |
 | `MMAPQ_ENOMEM` (-9) | `MmapOutOfMemoryError` |
 | `MMAPQ_EIO` (-10) | `MmapqError` |
-| `MMAPQ_ENOTREADY` (-11) | `MmapqError` |
+| `MMAPQ_ENOTREADY` (-11) | `QueueNotReadyError` |
 
 ## Installation
 
@@ -210,6 +220,7 @@ from mmapq import (
     BatchPollResult,        # Alias for PollResult
     BatchEntryStatus,       # Batch availability
     EntryStatus,            # Entry availability (reader)
+    ConflictBehavior,       # Transfer ID-conflict policy (AUTO/ABORT)
 
     # Single-message queue
     IndexedQueue,           # Queue factory
@@ -234,14 +245,18 @@ from mmapq import (
     QueueExistsError,       # Destination already exists
     AppenderIdConflictError,# Appender ID conflict
     MmapOutOfMemoryError,   # Allocation failure
+    QueueNotReadyError,     # Metadata not written yet (transient; retry)
+    ArchivedError,          # Index below the queue's start index (.index)
 
     # Runtime
     Runtime,                # Async region mapper
 
     # Archiver
     IndexedArchiver,        # Start-index management (single-message)
+    IndexedBatchArchiver,   # Start-index management (batch)
 
     # Transfer (export/import/copy)
+    APPENDER_ID_AUTO,       # mapper() sentinel: auto-assign the appender ID
     export_queue,           # Export queue to flat stream
     export_batch_queue,     # Export batch queue to flat stream
     import_queue,           # Import flat stream to queue
@@ -252,6 +267,11 @@ from mmapq import (
     copy_batch_queue,       # Copy batch queue to new directory
     copy_normal_to_batch,   # Copy flat queue as batch queue
     copy_batch_to_normal,   # Copy batch queue as flat queue
+
+    # Low-level
+    check_rc,               # Raise the mapped exception for a C return code
+    unsafe_ffi,             # Raw cffi FFI object (no argument checking)
+    unsafe_lib,             # Raw loaded C library (no argument checking)
 )
 ```
 
@@ -281,15 +301,20 @@ def handler(batch_index, messages):
 
 `IndexedAppender` (single-message) also provides:
 
-- **`append_uncommitted(data)`** — writes payload without committing. Invisible to readers,
-  discarded by crash recovery. Returns a payload offset for later use with `commit()`.
+- **`append_uncommitted(data)`** — writes payload without committing. Invisible to readers until
+  committed; after a crash only the lane's owner can recover it (see Recovery). Returns a payload
+  offset for later use with `commit()`.
 - **`commit(payload_offset)`** — publishes a previously uncommitted payload. Returns the
   committed index.
 
 `IndexedQueue` (single-message) also provides:
 
 - **`create_appender_with_id(appender_id)`** — creates an appender with a specific lane ID
-  (0–255). Raises `ValueError` if the ID is out of range.
+  (0–255). Raises `ValueError` if the ID is out of range, `AppenderIdConflictError` if the ID is
+  taken.
+- **`create(directory, queue_name, write_runtime=None, read_runtime=None, archivable=False, *, region_size=..., ring_size=..., max_file_size=..., start_index=..., timeout_ns=..., runtime=...)`**
+  — full-configuration create; defaults match the C library's `INDEXED_QUEUE_DEFAULT_*`
+  constants.
 
 `IndexedBatchQueue` (batch) also provides:
 
@@ -297,7 +322,12 @@ def handler(batch_index, messages):
   (0–255). Raises `ValueError` if the ID is out of range.
 - **`create(directory, queue_name, *, region_size=..., ring_size=..., max_file_size=..., start_index=..., timeout_ns=..., archivable=..., runtime=...)`**
   — full-configuration create. All params match the C library's `INDEXED_QUEUE_DEFAULT_*` constants.
-  Existing queues ignore sizing params (on-disk config is authoritative).
+
+For both queue types, create writes nothing: the queue's files are written when its first
+appender is created, with the settings of the queue handle it came from. `archivable`,
+`region_size`, `max_file_size` and `start_index` are stored then; every later open uses the
+stored values and ignores its own. `ring_size` and `timeout_ns` apply to each handle. Create
+the queue and its first appender in one place with the intended settings.
 
 `IndexedBatchAppender` (batch) also provides:
 
@@ -321,7 +351,10 @@ del rt
 ### Archiving
 
 An archivable queue (`archivable=True`) can advance its start index so old
-entries become inaccessible and their backing files can be safely deleted:
+entries become inaccessible and their backing files can be safely deleted.
+The setting takes effect only if this handle creates the queue's first
+appender (see `create` above); an archiving process can check
+`arch.archivable()` first:
 
 ```python
 from mmapq import IndexedArchiver, IndexedQueue
