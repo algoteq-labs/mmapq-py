@@ -56,6 +56,12 @@ carries only the binding-specific entries.
 - Reader view borrowing enforced; context exceptions preserved.
 - `IndexedReader.appender_id()` after a failed read raises instead of
   reporting the previous read's appender.
+- `IndexedArchiver.archivable_files` and `IndexedBatchArchiver.archivable_files`
+  returned at most 256 paths without saying that more files qualified; they
+  now return the complete listing.
+- Building from source failed with GCC 14 (an error by default there): one
+  C struct field was declared without the header's `const`. The build now
+  also fails on that class of mismatch with older compilers.
 
 ## Packaging (Python)
 

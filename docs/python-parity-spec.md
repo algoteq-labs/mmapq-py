@@ -1,3 +1,6 @@
+> Historical: the implementation spec used while building 0.2.0 parity. Not user documentation — it
+> quotes superseded docstrings; the README and the docstrings are authoritative.
+
 # Implementation Spec: mmapq feature parity
 
 **Audience:** implementing model/engineer with access to all three

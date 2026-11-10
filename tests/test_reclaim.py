@@ -252,5 +252,50 @@ class TestBatchReclaim(unittest.TestCase):
         self.assertEqual(r.read(0), [payload(0)])
 
 
+# Geometry for the listing-size tests: 32 KiB regions and files, one
+# 30,000-byte message per file (it does not fit beside another), so N
+# messages fill payload files 0..N-1. Archiving up to N-1 leaves message N-1
+# live; the lane's start_offset is the end of message N-2, inside file N-2,
+# so exactly payload_0_0 .. payload_0_{N-3} (N-2 files) are listed.
+def big_listing_names(n):
+    return sorted(f"payload_0_{k}" for k in range(n - 2))
+
+
+class TestListingPastTheFirstArray(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+
+    def test_single_listing_is_complete(self):
+        msg = b"\x07" * 30000
+        with IndexedQueue.create(self.directory.name, "q", archivable=True,
+                                 region_size=32768,
+                                 max_file_size=32768) as q:
+            with q.create_appender() as a:
+                for i in range(300):
+                    self.assertEqual(a.append(msg), i)
+            with q.create_archiver() as arch:
+                arch.archive_up_to_index(299)
+                listed = arch.archivable_files()
+        self.assertEqual(len(listed), 298)
+        self.assertEqual(file_names(listed), big_listing_names(300))
+
+    def test_batch_listing_is_complete(self):
+        msg = b"\x07" * 30000
+        with IndexedBatchQueue.create(self.directory.name, "q",
+                                      region_size=32768, max_file_size=32768,
+                                      archivable=True) as q:
+            with q.create_appender() as a:
+                for i in range(300):
+                    with a.start_batch() as w:
+                        w.append(msg)
+                        self.assertEqual(w.commit(), i)
+            with q.create_archiver() as arch:
+                arch.archive_up_to_index(299)
+                listed = arch.archivable_files()
+        self.assertEqual(len(listed), 298)
+        self.assertEqual(file_names(listed), big_listing_names(300))
+
+
 if __name__ == "__main__":
     unittest.main()

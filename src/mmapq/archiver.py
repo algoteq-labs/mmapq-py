@@ -41,7 +41,9 @@ class IndexedArchiver:
         ring_size:   number of simultaneously mapped regions
         runtime:     optional Runtime for async region mapping (keyword-only)
 
-        The queue must have been created before archiving is possible.
+        The archiver can be created at any time. Until the queue's first
+        appender has written its files, archivable() raises a retryable
+        error — retry on this archiver.
         """
         rt = require_open(runtime._inner) if runtime is not None else ffi.NULL
         ptr = ffi.new("MmapqIndexedArchiver **")
@@ -80,25 +82,33 @@ class IndexedArchiver:
     def archivable_files(self) -> list[str]:
         """Return paths to files fully covered by the archive boundary.
 
-        Files no live entry can need at the time of the call. Delete them
-        with reclaim_files() (always safe). If you delete, move or compress
-        them yourself, they are safe provided no undo (archive_up_to_index
-        below the current start_index) runs between this call and your last
-        unlink. An undo that ran before this call is harmless, because the
-        listing already reflects it (see doc/design/archiving-design.md).
+        Files no live entry can need at the time of the call. The listing is
+        complete: a full result is re-listed with a larger array until it
+        fits. Delete them with reclaim_files() (always safe). If you delete,
+        move or compress them yourself, they are safe provided no undo
+        (archive_up_to_index below the current start_index) runs between
+        this call and your last unlink. An undo that ran before this call
+        is harmless, because the listing already reflects it
+        (see doc/design/archiving-design.md).
         """
-        max_paths = 256
-        arr = ffi.new("char *[256]")
-        n = lib.mmapq_indexed_archiver_archivable_files(
-            require_open(self._inner), arr, max_paths)
-        check_rc(n, "archivable_files")
-        result = []
-        for i in range(n):
-            result.append(ffi.string(arr[i]).decode())
-            # Each path is a malloc'd string C allocated (strdup); the
-            # binding copies it and returns the memory immediately.
-            lib.free(arr[i])
-        return result
+        # C fills at most max_paths slots and does not say whether more
+        # files qualify, so a full result is re-listed with a larger array
+        # until it comes back short: the returned listing is complete.
+        max_paths = 1024
+        while True:
+            arr = ffi.new("char *[]", max_paths)
+            n = lib.mmapq_indexed_archiver_archivable_files(
+                require_open(self._inner), arr, max_paths)
+            check_rc(n, "archivable_files")
+            result = []
+            for i in range(n):
+                result.append(ffi.string(arr[i]).decode())
+                # Each path is a malloc'd string C allocated (strdup); the
+                # binding copies it and returns the memory immediately.
+                lib.free(arr[i])
+            if n < max_paths:
+                return result
+            max_paths *= 2
 
     def reclaim_files(self, marked) -> int:
         """Delete the files in ``marked`` that a fresh listing still reports as
@@ -192,19 +202,25 @@ class IndexedBatchArchiver:
                  "archive_up_to_index")
 
     def archivable_files(self) -> list[str]:
-        """Return paths to files fully covered by the archive boundary."""
-        max_paths = 256
-        arr = ffi.new("char *[256]")
-        n = lib.mmapq_indexed_batch_archiver_archivable_files(
-            require_open(self._inner), arr, max_paths)
-        check_rc(n, "archivable_files")
-        result = []
-        for i in range(n):
-            result.append(ffi.string(arr[i]).decode())
-            # Each path is a malloc'd string C allocated (strdup); the
-            # binding copies it and returns the memory immediately.
-            lib.free(arr[i])
-        return result
+        """Return paths to files fully covered by the archive boundary (the complete listing)."""
+        # C fills at most max_paths slots and does not say whether more
+        # files qualify, so a full result is re-listed with a larger array
+        # until it comes back short: the returned listing is complete.
+        max_paths = 1024
+        while True:
+            arr = ffi.new("char *[]", max_paths)
+            n = lib.mmapq_indexed_batch_archiver_archivable_files(
+                require_open(self._inner), arr, max_paths)
+            check_rc(n, "archivable_files")
+            result = []
+            for i in range(n):
+                result.append(ffi.string(arr[i]).decode())
+                # Each path is a malloc'd string C allocated (strdup); the
+                # binding copies it and returns the memory immediately.
+                lib.free(arr[i])
+            if n < max_paths:
+                return result
+            max_paths *= 2
 
     def reclaim_files(self, marked) -> int:
         """Delete the files in ``marked`` that a fresh listing still reports as

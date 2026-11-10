@@ -131,9 +131,20 @@ takes a free lane, and its walk finds nothing of the crashed writer's. A
 writer killed without closing leaves its ID taken (`AppenderIdConflictError`)
 until an operator who has established that the owner is dead releases it
 with the `mmapq-ids` tool from the [mmapq](https://github.com/algoteq-labs/mmapq)
-repository (`make mmapq-ids`, then `mmapq-ids <dir> <queue> --unset <id>`);
-`doc/guide/05-crash-and-restart.md` there gives the procedure. A writer
-that closed cleanly released its ID.
+repository (from its root: `make mmapq-ids`, then
+`tools/mmapq-ids/build/release/mmapq-ids <dir> <queue> --unset <id>` — the
+tool is not installed on your PATH); `doc/guide/05-crash-and-restart.md`
+there gives the procedure. A writer that closed cleanly released its ID.
+
+A crash can tear the record being written: the lane's highest-offset
+uncommitted record at that crash. Discard it, and rule out the records an
+earlier restart discarded — record their offsets durably, or validate each
+payload with your own check. A record that is not committed is never
+removed, so it reappears in every later walk. On a batch lane,
+`join_completed_open_batch()` reports — once — the batch the rejoin
+completed after a crash; it reappears in later walks unreported. Both
+recipes are in `doc/guide/05-crash-and-restart.md` in the mmapq
+repository.
 
 ```python
 from mmapq import IndexedQueue
@@ -219,6 +230,8 @@ for example Ubuntu 24.04), install into a virtual environment:
 ### From source
 
 ```bash
+git clone --recurse-submodules https://github.com/algoteq-labs/mmapq-py
+cd mmapq-py
 pip install -e .        # builds the cffi extension against the C sources
 ```
 
@@ -384,7 +397,20 @@ files = arch.archivable_files()         # files no live entry can need
 deleted = arch.reclaim_files(files)   # safe even against a concurrent undo
 ```
 
+The rest of the contract is in chapter 6 of the mmapq repository's guide
+(`doc/guide/06-archiving-and-reclamation.md`): a snapshot is identified by
+the next index to apply; archive only after the snapshot is durable; on
+start and on `PollResult.ARCHIVED` — which holds the cursor — read
+`start_index()`, load that snapshot and `move_to_index()` to it. Files are
+reclaimed whole, so freed space comes in `max_file_size` steps: with the
+default 1 GiB files a lane frees nothing until it has written more than
+1 GiB. Size `max_file_size` to the retention you want.
+
 ### Transfer (export/import/copy)
+
+For a replica on the same host, copy (`copy_queue`, `copy_batch_queue`;
+`preserve=True` keeps the index space and appender IDs). For a portable
+file to store or move, export and import.
 
 The library provides 10 transfer functions across single-message and batch
 queues:

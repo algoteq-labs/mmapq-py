@@ -69,7 +69,7 @@ ffi.cdef("""
         int64_t  index;
         uint8_t  appender_id;
         int64_t  msg_offset;
-        void    *data;
+        const void *data;
         int32_t  length;
         int      status;
     } MmapqReadingContext;
@@ -387,7 +387,10 @@ ffi.set_source(
     include_dirs=[str(_rel_inc), str(_rel_src)],
     libraries=["rt", "pthread", "m"],
     extra_compile_args=["-std=gnu11", "-O2", "-D_GNU_SOURCE", "-DNDEBUG",
-                        "-Wno-unused-parameter", "-Wno-attributes"],
+                        "-Wno-unused-parameter", "-Wno-attributes",
+                        # GCC 14 makes this an error by default; making it one
+                        # here keeps older compilers, CI included, failing the same way.
+                        "-Werror=incompatible-pointer-types"],
 )
 
 setup(
