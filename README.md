@@ -235,6 +235,12 @@ cd mmapq-py
 pip install -e .        # builds the cffi extension against the C sources
 ```
 
+Both installs compile the C extension (0.2.0 publishes a source package
+only), so they need a C compiler. pip uses the compiler your Python was
+built with; if the build fails because that compiler is not installed —
+for example `error: [Errno 2] No such file or directory: 'clang'` — name
+one that is: `CC=gcc pip install mmapq` (or `CC=gcc pip install -e .`).
+
 ## API
 
 ### Exports
