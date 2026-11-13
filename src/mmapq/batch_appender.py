@@ -234,8 +234,10 @@ class IndexedBatchAppender:
 
         Returns the completed batch's offset once per join-completion event
         (read-and-clear), None otherwise. The batch was completed by the
-        queue, not the app: it may lack messages the app intended; the last
-        counted message may have partial content.
+        queue, not the app: it may lack messages the app intended. As for
+        every batch after a crash, its count and message lengths are
+        complete but message data may be partly written; validate before
+        committing.
         """
         out = ffi.new("int64_t *")
         rc = lib.mmapq_indexed_batch_appender_join_completed_open_batch(

@@ -86,16 +86,13 @@ class IndexedAppender:
         yielded, even after an undo; discarded tails reappear in recovery.
         Raises QueueCorruptError on a zero archive line — a corrupt
         appender meta (pre-0.2.0 queues are refused at open with
-        SchemaMismatchError). After a process crash at most the record that
-        was being written — the lane's highest-offset uncommitted record
-        at that crash — can be torn (single writer, sequential writes, the
-        length prefix is written before the data); every record written
-        before it is byte-intact. A record that is not committed is never
-        removed: one torn at an earlier crash reappears in every later
-        walk at an offset that is no longer the highest. Discard the
-        highest-offset record and re-request or re-append it; validate
-        the others before committing (the library has no payload
-        integrity check) or remember the offsets discarded earlier.
+        SchemaMismatchError). After a process crash every record keeps its
+        full declared length (the length prefix is written before the
+        data), so the walk never misframes; the data of an uncommitted
+        record may be partly written, and the library cannot tell it from
+        a complete record. Validate each record before committing it (a
+        sequence number or checksum in the payload). A record that is not
+        committed is never removed: it reappears in every later walk.
         """
         require_open(self._inner)
         out = ffi.new("MmapqUncommittedPayloadIterator **")
