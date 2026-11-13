@@ -22,7 +22,7 @@ import struct
 from mmapq import IndexedBatchQueue, NextMove, PollResult
 
 SHUTDOWN_SEQ = 0
-LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence
+LATENCY_HEADER_FMT = "<HI"  # uint16 instance_id, uint32 sequence (little-endian, as the C and Rust examples)
 
 # Defaults
 DEFAULT_ITERATIONS = 100000

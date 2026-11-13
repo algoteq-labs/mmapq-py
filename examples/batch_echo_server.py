@@ -12,7 +12,7 @@ import struct
 from mmapq import IndexedBatchQueue, NextMove
 
 SHUTDOWN_SEQ = 0
-LATENCY_HEADER_FMT = ">HI"  # uint16 instance_id, uint32 sequence
+LATENCY_HEADER_FMT = "<HI"  # uint16 instance_id, uint32 sequence (little-endian, as the C and Rust examples)
 
 
 def pin_thread(cpu):
