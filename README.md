@@ -213,10 +213,10 @@ by construction and never drifts independently.
 | `MMAPQ_ECORRUPT` (-4) | `QueueCorruptError` |
 | `MMAPQ_ESCHEMA` (-5) | `SchemaMismatchError` |
 | `MMAPQ_EEXIST` (-6) | `QueueExistsError` |
-| `MMAPQ_ENOENT` (-7) | `FileNotFoundError` |
+| `MMAPQ_ENOENT` (-7) | `QueueFileNotFoundError` (also a `FileNotFoundError`) |
 | `MMAPQ_EIDCONFLICT` (-8) | `AppenderIdConflictError` |
 | `MMAPQ_ENOMEM` (-9) | `MmapOutOfMemoryError` |
-| `MMAPQ_EIO` (-10) | `MmapqError` |
+| `MMAPQ_EIO` (-10) | `MmapqError` (permission, path or filesystem problem — fix the cause) |
 | `MMAPQ_ENOTREADY` (-11) | `QueueNotReadyError` |
 
 ## Installation
@@ -278,6 +278,7 @@ from mmapq import (
     QueueCorruptError,      # On-disk corruption
     SchemaMismatchError,    # Schema/type mismatch
     QueueExistsError,       # Destination already exists
+    QueueFileNotFoundError, # Queue file/directory missing (also FileNotFoundError)
     AppenderIdConflictError,# Appender ID conflict
     MmapOutOfMemoryError,   # Allocation failure
     QueueNotReadyError,     # Metadata not written yet (transient; retry)

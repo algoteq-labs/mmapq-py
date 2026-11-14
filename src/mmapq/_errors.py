@@ -49,6 +49,16 @@ class MmapOutOfMemoryError(MmapqError):
     """Internal allocation failure (calloc, strdup, etc.). Back off, do not retry hot-loop."""
 
 
+class QueueFileNotFoundError(MmapqError, FileNotFoundError):
+    """A queue file or directory does not exist (MMAPQ_ENOENT, -7).
+
+    Subclasses both MmapqError and the builtin FileNotFoundError, so
+    ``except MmapqError`` and ``except FileNotFoundError`` both catch it.
+    Before 0.2.1, -7 raised the builtin FileNotFoundError, and a missing
+    base directory raised MmapqError (it was reported as -1).
+    """
+
+
 class ArchivedError(MmapqError, LookupError):
     """A reader's read resolved to an index below the queue's start index.
 
@@ -72,7 +82,7 @@ _RC_ERRORS = {
     -10: MmapqError,
     -9: MmapOutOfMemoryError,
     -8: AppenderIdConflictError,
-    -7: FileNotFoundError,
+    -7: QueueFileNotFoundError,
     -6: QueueExistsError,
     -5: SchemaMismatchError,
     -4: QueueCorruptError,

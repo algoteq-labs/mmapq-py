@@ -39,6 +39,7 @@ from ._errors import (
     QueueNotReadyError,
     SchemaMismatchError,
     QueueExistsError,
+    QueueFileNotFoundError,
     check_rc,
 )
 from .types import (
@@ -101,6 +102,7 @@ __all__ = [
     "QueueNotReadyError",
     "SchemaMismatchError",
     "QueueExistsError",
+    "QueueFileNotFoundError",
     "AppenderIdConflictError",
     "MmapOutOfMemoryError",
     "ArchivedError",
