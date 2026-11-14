@@ -19,10 +19,21 @@ concurrency:
 
 jobs:
   python:
-    name: Python tests (committed gitlink)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    name: Python tests (committed gitlink)${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: x86_64, suffix: '', timeout: 25 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64, suffix: ' [arm64]', timeout: 50 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
     steps:
+      - name: Platform
+        run: |
+          uname -m
+          nproc
+          test "$(uname -m)" = "${{ matrix.arch }}"
       - name: Checkout mmapq-py (committed gitlink)
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -51,10 +62,21 @@ jobs:
           bash c/scripts/check_binding_coverage.sh --python .
 
   sdist:
-    name: Package (sdist)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    name: Package (sdist)${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: x86_64, suffix: '', timeout: 20 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64, suffix: ' [arm64]', timeout: 40 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
     steps:
+      - name: Platform
+        run: |
+          uname -m
+          nproc
+          test "$(uname -m)" = "${{ matrix.arch }}"
       - name: Checkout mmapq-py (committed gitlink)
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:

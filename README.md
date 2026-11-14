@@ -548,9 +548,8 @@ BSD 3-Clause — see [LICENSE](https://github.com/algoteq-labs/mmapq-py/blob/mai
 
 ## Platform
 
-Linux only (x86-64 and ARM64; ARM64 passed a one-off full run for 0.2.0
-and is not yet in regular CI). Requires naturally aligned lock-free
-atomics over `MAP_SHARED` mmap.
+Linux only (x86-64 and ARM64, both tested in CI). Requires naturally
+aligned lock-free atomics over `MAP_SHARED` mmap.
 ## Upcoming hardening compatibility changes
 
 Transfer mapper exceptions now stop the transfer and re-raise the original
