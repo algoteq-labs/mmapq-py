@@ -154,7 +154,9 @@ class IndexedReader:
 
     @_reader_operation
     def last_index(self) -> int:
-        """Highest committed index, or -1 if the queue is empty."""
+        """Highest committed index, or -1 if the queue is empty — or if a
+        header file it needs exists but cannot be read (a read of an index
+        in that file then raises MmapqError with MMAPQ_EIO)."""
         self._check_open()
         return lib.mmapq_indexed_reader_last_index(self._inner)
 
@@ -325,7 +327,9 @@ class IndexedBatchReader:
         return self._ctx.appender_id
 
     def last_index(self) -> int:
-        """Highest committed batch index, or -1 if the queue is empty."""
+        """Highest committed batch index, or -1 if the queue is empty — or
+        if a header file it needs exists but cannot be read (a read of an
+        index in that file then raises MmapqError with MMAPQ_EIO)."""
         self._check_open()
         return lib.mmapq_indexed_batch_reader_last_index(self._inner)
 
